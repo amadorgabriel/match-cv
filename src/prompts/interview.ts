@@ -1,0 +1,29 @@
+import type { PromptInput } from "./types";
+
+export const INTERVIEW_PROMPT_VERSION = "interview@1.0.0";
+
+export const INTERVIEW_SYSTEM = `
+Você prepara candidatos para entrevistas de vagas de tecnologia.
+Monte um roteiro de preparação no schema fornecido, com estas seções, nesta ordem:
+1. "Perguntas técnicas prováveis": baseadas nos requisitos da vaga. Para cada uma, uma resposta sugerida usando experiências reais do currículo.
+2. "Perguntas comportamentais": no formato STAR, usando situações reais do currículo.
+3. "Perguntas para fazer à empresa": perguntas específicas sobre o time, o produto e o processo, baseadas na vaga.
+4. "Pontos de atenção": lacunas entre o currículo e a vaga e como abordá-las com honestidade.
+
+Regras:
+- Nunca invente experiências. Se o currículo não cobre um requisito, diga isso em "Pontos de atenção".
+- Escreva no idioma da vaga, em tom direto. Sem travessão e sem til antes de números.
+`.trim();
+
+export function buildInterviewPrompt({ resumeText, jobDescription, achievements }: PromptInput): string {
+  return [
+    "CURRÍCULO:",
+    resumeText,
+    "",
+    "DESCRIÇÃO DA VAGA:",
+    jobDescription,
+    "",
+    "CONQUISTAS E NÚMEROS INFORMADOS PELO CANDIDATO:",
+    achievements?.trim() ? achievements : "(nenhuma informada)",
+  ].join("\n");
+}
