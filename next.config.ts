@@ -17,7 +17,8 @@ const csp = [
   "img-src 'self' blob: data:",
   "font-src 'self'",
   "connect-src 'self'",
-  "object-src 'none'",
+  "frame-src 'self' blob:",
+  "object-src blob:",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
@@ -39,7 +40,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   // unpdf traz o pdf.js; manter fora do bundle do servidor.
-  serverExternalPackages: ["unpdf"],
+  serverExternalPackages: ["unpdf", "@react-pdf/renderer"],
   turbopack: {
     rules: {
       "*.css": {

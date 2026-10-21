@@ -1,3 +1,4 @@
+import { cvPdfFilename } from "@/lib/pdf/cv-document";
 import { cvToPdf } from "@/lib/pdf/cv-to-pdf";
 import { CvSchema } from "@/lib/schemas/outputs";
 import { checkRateLimit, jsonError, readJson } from "@/lib/security/http";
@@ -6,8 +7,8 @@ import { checkRateLimit, jsonError, readJson } from "@/lib/security/http";
 
 /**
  * POST /api/cv/pdf  (body: JSON do CV no CvSchema)
- * Devolve o PDF ATS. PLACEHOLDER: gerador simples em lib/pdf/simple-pdf.ts.
- * TODO: trocar por template Typst (plano A) ou @react-pdf/renderer (plano B).
+ * Devolve o PDF ATS gerado com @react-pdf/renderer.
+ * A prévia na tela usa o mesmo documento no navegador.
  */
 export async function POST(req: Request) {
   const limited = checkRateLimit(req, "cv-pdf", 30);
@@ -17,12 +18,11 @@ export async function POST(req: Request) {
   if (!parsed.ok) return parsed.response;
 
   try {
-    const pdf = cvToPdf(parsed.data);
-    const safeName = parsed.data.fullName.normalize("NFD").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "") || "cv";
-    return new Response(pdf.buffer as ArrayBuffer, {
+    const pdf = await cvToPdf(parsed.data);
+    return new Response(Buffer.from(pdf), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${safeName}-CV.pdf"`,
+        "Content-Disposition": `attachment; filename="${cvPdfFilename(parsed.data.fullName)}"`,
         "Cache-Control": "no-store",
       },
     });

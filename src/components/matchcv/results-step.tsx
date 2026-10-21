@@ -3,7 +3,6 @@
 import {
   AlertTriangleIcon,
   BriefcaseIcon,
-  DownloadIcon,
   FileTextIcon,
   LoaderCircleIcon,
   MailIcon,
@@ -11,17 +10,17 @@ import {
   RefreshCwIcon,
   WalletIcon,
 } from "lucide-react";
-import { useState } from "react";
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { downloadCvPdf, type Results } from "@/lib/client/api";
+import type { Results } from "@/lib/client/api";
 import type { Artifact, Salary, ValidationReport } from "@/lib/schemas/outputs";
 import { OUTPUT_IDS, type OutputId, type OutputSelection } from "@/lib/schemas/requests";
 
 import { CopyButton } from "./copy-button";
+import { CvPdfPreview } from "./cv-pdf-preview";
 import type { StepId, StepState } from "./types";
 
 interface Props {
@@ -173,24 +172,9 @@ function SalaryCard({ salary }: { salary: Salary }) {
 }
 
 export function ResultsStep({ outputs, results, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
-  const [downloading, setDownloading] = useState(false);
-  const [pdfError, setPdfError] = useState<string | null>(null);
   const cv = results.cv?.data;
   const visibleTabs = OUTPUT_IDS.filter((id) => outputs[id]);
   const defaultTab: OutputId | undefined = visibleTabs[0];
-
-  async function download() {
-    if (!cv) return;
-    setDownloading(true);
-    setPdfError(null);
-    try {
-      await downloadCvPdf(cv);
-    } catch (err) {
-      setPdfError(err instanceof Error ? err.message : "Falha ao gerar o PDF.");
-    } finally {
-      setDownloading(false);
-    }
-  }
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -253,13 +237,7 @@ export function ResultsStep({ outputs, results, steps, isMock, regenerating, onR
                     </ul>
                   </div>
                   <ValidationNotice report={results.cv?.validation} />
-                  <div>
-                    <Button onClick={download} disabled={downloading}>
-                      {downloading ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
-                      Baixar CV em PDF
-                    </Button>
-                    {pdfError && <p className="text-destructive mt-2 text-sm">{pdfError}</p>}
-                  </div>
+                  <CvPdfPreview cv={cv} />
                 </>
               )}
             </CardContent>
