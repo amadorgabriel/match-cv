@@ -19,6 +19,7 @@ import type { Results } from "@/lib/client/api";
 import type { Artifact, Salary, ValidationReport } from "@/lib/schemas/outputs";
 import { analyzeJob } from "@/lib/salary/job";
 import { CopyButton } from "./copy-button";
+import { CoverLetterPdf } from "./cover-letter-pdf";
 import { CvPdfPreview } from "./cv-pdf-preview";
 import type { StepId, StepState } from "./types";
 
@@ -330,6 +331,7 @@ export function ResultsStep({ results, jobDescription, steps, isMock, regenerati
                 <>
                   <StepError steps={steps} id="cover-letter" />
                   <Paragraphs text={results["cover-letter"].data.body} />
+                  <CoverLetterPdf body={results["cover-letter"].data.body} fullName={cv?.fullName} company={company} />
                   <ValidationNotice report={results["cover-letter"].validation} />
                 </>
               ) : (
