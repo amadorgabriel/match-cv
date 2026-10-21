@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { connection } from "next/server";
 
 import { SiteFooter, SiteHeader } from "@/components/matchcv/site-header";
 
@@ -21,7 +22,9 @@ export const metadata: Metadata = {
     "Envie seu currículo e a vaga e receba CV ATS em PDF, e-mail, cover letter, roteiro de entrevista e faixa salarial.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Nonce da CSP só existe no request. Sem isso a página sai estática e o Next não injeta o nonce.
+  await connection();
   return (
     <html lang="pt-BR" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
