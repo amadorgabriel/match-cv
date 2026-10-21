@@ -19,11 +19,13 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadCvPdf, type Results } from "@/lib/client/api";
 import type { Artifact, Salary, ValidationReport } from "@/lib/schemas/outputs";
+import { OUTPUT_IDS, type OutputId, type OutputSelection } from "@/lib/schemas/requests";
 
 import { CopyButton } from "./copy-button";
 import type { StepId, StepState } from "./types";
 
 interface Props {
+  outputs: OutputSelection;
   results: Results;
   steps: StepState[];
   isMock: boolean;
@@ -120,10 +122,12 @@ function SalaryCard({ salary }: { salary: Salary }) {
   );
 }
 
-export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
+export function ResultsStep({ outputs, results, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
   const [downloading, setDownloading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const cv = results.cv?.data;
+  const visibleTabs = OUTPUT_IDS.filter((id) => outputs[id]);
+  const defaultTab: OutputId | undefined = visibleTabs[0];
 
   async function download() {
     if (!cv) return;
@@ -163,16 +167,17 @@ export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate
         </div>
       )}
 
-      <Tabs defaultValue="cv">
+      {defaultTab ? (
+      <Tabs defaultValue={defaultTab}>
         <TabsList className="flex h-auto w-full flex-wrap">
-          <TabsTrigger value="cv"><FileTextIcon />CV ATS</TabsTrigger>
-          <TabsTrigger value="email"><MailIcon />E-mail</TabsTrigger>
-          <TabsTrigger value="cover-letter"><BriefcaseIcon />Cover letter</TabsTrigger>
-          <TabsTrigger value="interview"><MessagesSquareIcon />Entrevista</TabsTrigger>
-          <TabsTrigger value="salary"><WalletIcon />Faixa salarial</TabsTrigger>
+          {outputs.cv ? <TabsTrigger value="cv"><FileTextIcon />CV ATS</TabsTrigger> : null}
+          {outputs.email ? <TabsTrigger value="email"><MailIcon />E-mail</TabsTrigger> : null}
+          {outputs["cover-letter"] ? <TabsTrigger value="cover-letter"><BriefcaseIcon />Cover letter</TabsTrigger> : null}
+          {outputs.interview ? <TabsTrigger value="interview"><MessagesSquareIcon />Entrevista</TabsTrigger> : null}
+          {outputs.salary ? <TabsTrigger value="salary"><WalletIcon />Faixa salarial</TabsTrigger> : null}
         </TabsList>
 
-        <TabsContent value="cv">
+        {outputs.cv ? <TabsContent value="cv">
           <Card>
             <CardHeader>
               <CardTitle>CV compatível com ATS</CardTitle>
@@ -209,9 +214,9 @@ export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> : null}
 
-        <TabsContent value="email">
+        {outputs.email ? <TabsContent value="email">
           <Card>
             <CardHeader>
               <CardTitle>E-mail para a empresa</CardTitle>
@@ -229,9 +234,9 @@ export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate
               <ValidationNotice report={results.email?.validation} />
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> : null}
 
-        <TabsContent value="cover-letter">
+        {outputs["cover-letter"] ? <TabsContent value="cover-letter">
           <Card>
             <CardHeader>
               <CardTitle>Cover letter</CardTitle>
@@ -247,9 +252,9 @@ export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate
               <ValidationNotice report={results["cover-letter"]?.validation} />
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> : null}
 
-        <TabsContent value="interview">
+        {outputs.interview ? <TabsContent value="interview">
           <Card>
             <CardHeader>
               <CardTitle>Roteiro de entrevista</CardTitle>
@@ -284,9 +289,9 @@ export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> : null}
 
-        <TabsContent value="salary">
+        {outputs.salary ? <TabsContent value="salary">
           <Card>
             <CardHeader>
               <CardTitle>Faixa salarial estimada</CardTitle>
@@ -300,8 +305,9 @@ export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate
               {results.salary && <SalaryCard salary={results.salary} />}
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> : null}
       </Tabs>
+      ) : null}
     </div>
   );
 }

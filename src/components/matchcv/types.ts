@@ -1,14 +1,18 @@
 import type { ProviderId } from "@/lib/ai/catalog";
 import type { Artifact } from "@/lib/schemas/outputs";
+import type { OutputSelection } from "@/lib/schemas/requests";
 
 /** Valores do formulário. Ficam só em memória (estado React). */
 export interface FormValues {
   file: File;
+  /** PDF opcional com conquistas e números por empresa. */
+  achievementsFile: File | null;
   jobDescription: string;
   achievements: string;
   provider: ProviderId;
   model: string;
   apiKey: string;
+  outputs: OutputSelection;
 }
 
 export type StepId = "parse" | Artifact | "salary";
