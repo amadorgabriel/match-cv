@@ -1,4 +1,5 @@
 import type { ProviderId } from "@/lib/ai/catalog";
+import { PROVIDER_SLOW_MESSAGE } from "@/lib/ai/generation-deadline";
 import { parseRetryAfterValue } from "@/lib/async/pool";
 import { cvPdfFilename } from "@/lib/pdf/filename";
 import type { Artifact, ArtifactOutput, Cv, GenerateResponse, Salary } from "@/lib/schemas/outputs";
@@ -19,21 +20,37 @@ export class ApiError extends Error {
   }
 }
 
-/** 429 e 5xx podem ser tentados de novo. `no_data` não: não é instabilidade. */
+/** 429 e 5xx podem ser tentados de novo. Timeout e ausência de dado não. */
 export function isRetryableClientError(error: unknown): boolean {
-  return error instanceof ApiError && (error.status === 429 || (error.status >= 500 && error.code !== "no_data"));
+  return (
+    error instanceof ApiError &&
+    error.code !== "provider_timeout" &&
+    error.code !== "no_data" &&
+    (error.status === 429 || error.status >= 500)
+  );
+}
+
+/** Conexão fechada sem HTTP (proxy de 30s, modelo travado). Não é cancelamento. */
+export function errorFromFailedFetch(error: unknown, signal?: AbortSignal): Error {
+  if (signal?.aborted) return error instanceof Error ? error : new Error("Aborted");
+  if (error instanceof ApiError) return error;
+  return new ApiError(PROVIDER_SLOW_MESSAGE, 0, "provider_timeout");
 }
 
 async function handle<T>(res: Response): Promise<T> {
   if (res.ok) return (await res.json()) as T;
   let message = "Algo deu errado. Tente de novo.";
   let code: string | undefined;
+  const text = await res.text();
   try {
-    const body = (await res.json()) as { error?: { message?: string; code?: string } };
+    const body = JSON.parse(text) as { error?: { message?: string; code?: string } };
     message = body.error?.message ?? message;
     code = body.error?.code;
   } catch {
-    // corpo não JSON
+    if (res.status === 500 || res.status === 502 || res.status === 504) {
+      message = PROVIDER_SLOW_MESSAGE;
+      code = "provider_timeout";
+    }
   }
   throw new ApiError(message, res.status, code, parseRetryAfterValue(res.headers.get("retry-after")));
 }
@@ -83,14 +100,22 @@ export async function generate<A extends Artifact>(
   payload: GeneratePayload,
   signal?: AbortSignal,
 ): Promise<GenerateResponse<A>> {
-  return handle(await postJson(`/api/generate/${artifact}`, payload, signal));
+  try {
+    return await handle(await postJson(`/api/generate/${artifact}`, payload, signal));
+  } catch (error) {
+    throw errorFromFailedFetch(error, signal);
+  }
 }
 
 export async function fetchSalary(
   input: { jobDescription: string; provider: ProviderId; model: string; apiKey: string },
   signal?: AbortSignal,
 ): Promise<Salary> {
-  return handle(await postJson("/api/salary", input, signal));
+  try {
+    return await handle(await postJson("/api/salary", input, signal));
+  } catch (error) {
+    throw errorFromFailedFetch(error, signal);
+  }
 }
 
 export async function downloadCvPdf(cv: Cv, company?: string): Promise<void> {

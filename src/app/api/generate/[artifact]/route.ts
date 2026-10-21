@@ -1,5 +1,6 @@
 import { isRealAiEnabled } from "@/lib/ai/flags";
 import { generateArtifact } from "@/lib/ai/generate";
+import { isProviderTimeout, PROVIDER_SLOW_MESSAGE, withGenerationDeadline } from "@/lib/ai/generation-deadline";
 import { providerRateLimitMessage, readProviderHttpFailure } from "@/lib/ai/provider-error";
 import { ProviderConfigError } from "@/lib/ai/providers";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
@@ -32,15 +33,18 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
   if (!parsed.ok) return parsed.response;
 
   const started = Date.now();
+  const deadline = withGenerationDeadline(req.signal);
   try {
     const result = await generateArtifact(artifact, parsed.data, {
       realAi: isRealAiEnabled(),
-      abortSignal: req.signal,
+      abortSignal: deadline.signal,
     });
     return jsonOk(result);
   } catch (err) {
+    if (req.signal.aborted && !deadline.timedOut()) return new Response(null, { status: 499 });
     const providerFailure = readProviderHttpFailure(err);
-    const statusCode = err instanceof ProviderConfigError ? 400 : providerFailure?.statusCode === 429 ? 429 : 502;
+    const timedOut = deadline.timedOut() || isProviderTimeout(err);
+    const statusCode = err instanceof ProviderConfigError ? 400 : providerFailure?.statusCode === 429 ? 429 : timedOut ? 504 : 502;
     logApiError({
       route: "/api/generate/[artifact]",
       error: err,
@@ -58,6 +62,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
         "Retry-After": String(seconds),
       });
     }
+    if (timedOut) return jsonError(504, "provider_timeout", PROVIDER_SLOW_MESSAGE);
     return jsonError(502, "generation_failed", "A geração falhou. Confira a chave e o modelo e tente de novo.");
   }
 }

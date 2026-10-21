@@ -17,6 +17,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   cacheComponents: true,
+  experimental: {
+    // O proxy do next dev corta a rota em 30s e o navegador mostra
+    // net::ERR_EMPTY_RESPONSE. Modelo gratuito passa disso. 130s fica
+    // acima do prazo da geração (100s) e do maxDuration (120s).
+    proxyTimeout: 130_000,
+  },
   partialPrefetching: true,
   // unpdf traz o pdf.js; manter fora do bundle do servidor.
   serverExternalPackages: ["unpdf", "@react-pdf/renderer"],
