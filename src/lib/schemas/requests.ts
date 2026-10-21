@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { MODEL_ID_PATTERN, PROVIDER_IDS } from "@/lib/ai/catalog";
+import { BriefSchema } from "@/lib/schemas/brief";
 
 /** Limites de entrada (também validados no cliente). */
 export const LIMITS = {
@@ -36,6 +37,8 @@ export const GenerateRequestSchema = ProviderSelectionSchema.extend({
   achievements: z.string().max(LIMITS.maxAchievementsChars).optional().default(""),
   /** Texto extraído do PDF opcional de conquistas. Vazio quando o usuário não envia o arquivo. */
   achievementsDocument: z.string().max(LIMITS.maxResumeChars).optional().default(""),
+  /** Perfil e vaga já extraídos neste fluxo. O servidor não guarda este objeto. */
+  brief: BriefSchema.optional(),
 });
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;
 
@@ -56,12 +59,13 @@ export const OutputSelectionSchema = z
   });
 export type OutputSelection = z.infer<typeof OutputSelectionSchema>;
 
+/** Só o CV vem marcado. Os outros materiais nascem do botão Gerar de cada aba. */
 export const DEFAULT_OUTPUT_SELECTION: OutputSelection = {
   cv: true,
-  email: true,
-  "cover-letter": true,
-  interview: true,
-  salary: true,
+  email: false,
+  "cover-letter": false,
+  interview: false,
+  salary: false,
 };
 
 const ARTIFACT_OUTPUTS = ["cv", "email", "cover-letter", "interview"] as const;

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 
 import { concurrencyForProvider, mapWithConcurrency, RETRY_ATTEMPTS, retryAsync, retryDelayMs } from "@/lib/async/pool";
-import { ApiError, fetchSalary, generate, isRetryableClientError, parseResume, type GeneratePayload, type Results } from "@/lib/client/api";
+import { ApiError, fetchBrief, fetchSalary, generate, isRetryableClientError, parseResume, type GeneratePayload, type Results } from "@/lib/client/api";
 import { analyzeJob, salaryProgressMessages } from "@/lib/salary/job";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
 import { DEFAULT_OUTPUT_SELECTION, processingStepsFor } from "@/lib/schemas/requests";
@@ -42,6 +42,7 @@ export function MatchCvFlow() {
   const [results, setResults] = useState<Results>({});
   const [regenerating, setRegenerating] = useState<StepId | null>(null);
   const payloadRef = useRef<GeneratePayload | null>(null);
+  const briefFlight = useRef<Promise<void> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const setStep = (id: StepId, patch: Partial<StepState>) =>
@@ -52,9 +53,29 @@ export function MatchCvFlow() {
       return prev.map((step) => (step.id === id ? { ...step, ...patch } : step));
     });
 
+  function loadBrief(payload: GeneratePayload, signal?: AbortSignal): Promise<void> {
+    if (payload.brief) return Promise.resolve();
+    if (!briefFlight.current) {
+      const flight = fetchBrief(payload, signal)
+        .then((brief) => {
+          payload.brief = brief;
+        })
+        .catch(() => {
+          // Sem o perfil, e-mail, carta e entrevista seguem com o texto bruto.
+        })
+        .finally(() => {
+          if (briefFlight.current === flight) briefFlight.current = null;
+        });
+      briefFlight.current = flight;
+    }
+    return briefFlight.current;
+  }
+
   async function runArtifact(artifact: Artifact, payload: GeneratePayload, signal?: AbortSignal) {
     setStep(artifact, { status: "running", error: undefined, detail: undefined });
     try {
+      if (artifact !== "cv") await loadBrief(payload, signal);
+      if (signal?.aborted) return;
       const r = await retryAsync(() => generate(artifact, payload, signal), {
         attempts: RETRY_ATTEMPTS,
         signal,
@@ -156,6 +177,7 @@ export function MatchCvFlow() {
       }
     }
 
+    briefFlight.current = null;
     const payload: GeneratePayload = {
       provider: v.provider,
       model: v.model,
@@ -193,6 +215,7 @@ export function MatchCvFlow() {
   }
 
   function reset() {
+    briefFlight.current = null;
     payloadRef.current = null;
     setResults({});
     setValues((prev) => (prev ? { ...prev, jobDescription: "", achievements: "", achievementsFile: null } : prev));

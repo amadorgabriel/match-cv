@@ -10,6 +10,8 @@ export interface PromptDefinition {
   version: string;
   system: string;
   build: (input: PromptInput) => string;
+  /** Teto de saída, folgado para o JSON do artefato não ser cortado no meio. */
+  maxOutputTokens: number;
   /** Limite de palavras checado pelo validador (texto principal). */
   maxWords?: number;
   /** Se o validador anti-IA roda sobre a saída. */
@@ -17,16 +19,30 @@ export interface PromptDefinition {
 }
 
 export const PROMPTS: Record<Artifact, PromptDefinition> = {
-  cv: { version: CV_PROMPT_VERSION, system: CV_SYSTEM, build: buildCvPrompt, humanize: true },
-  email: { version: EMAIL_PROMPT_VERSION, system: EMAIL_SYSTEM, build: buildEmailPrompt, maxWords: 170, humanize: true },
+  cv: { version: CV_PROMPT_VERSION, system: CV_SYSTEM, build: buildCvPrompt, maxOutputTokens: 8000, humanize: true },
+  email: {
+    version: EMAIL_PROMPT_VERSION,
+    system: EMAIL_SYSTEM,
+    build: buildEmailPrompt,
+    maxOutputTokens: 1500,
+    maxWords: 170,
+    humanize: true,
+  },
   "cover-letter": {
     version: COVER_LETTER_PROMPT_VERSION,
     system: COVER_LETTER_SYSTEM,
     build: buildCoverLetterPrompt,
+    maxOutputTokens: 2500,
     maxWords: 380,
     humanize: true,
   },
-  interview: { version: INTERVIEW_PROMPT_VERSION, system: INTERVIEW_SYSTEM, build: buildInterviewPrompt, humanize: false },
+  interview: {
+    version: INTERVIEW_PROMPT_VERSION,
+    system: INTERVIEW_SYSTEM,
+    build: buildInterviewPrompt,
+    maxOutputTokens: 6000,
+    humanize: false,
+  },
 };
 
 export type { PromptInput };

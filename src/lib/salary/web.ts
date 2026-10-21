@@ -6,7 +6,7 @@ import type { ProviderId } from "@/lib/ai/catalog";
 import { readProviderHttpFailure } from "@/lib/ai/provider-error";
 import { buildWebSearchRequest, supportsNativeWebSearch } from "@/lib/ai/providers";
 import { logApiError } from "@/lib/security/redact";
-import { buildWebSalaryPrompt, WEB_SALARY_SYSTEM } from "@/prompts/salary";
+import { buildWebSalaryPrompt, WEB_SALARY_MAX_OUTPUT_TOKENS, WEB_SALARY_SYSTEM } from "@/prompts/salary";
 
 import type { JobAnalysis } from "./job";
 import { parseWebSalaryText, type WebSalaryHit } from "./web-parse";
@@ -50,6 +50,7 @@ export async function searchWebSalary(input: {
         location: input.job.location,
         jobDescription: input.jobDescription || input.job.rawTitle,
       }),
+      maxOutputTokens: WEB_SALARY_MAX_OUTPUT_TOKENS,
       maxRetries: 0,
       abortSignal: input.signal,
     });

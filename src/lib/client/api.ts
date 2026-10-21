@@ -2,6 +2,7 @@ import type { ProviderId } from "@/lib/ai/catalog";
 import { PROVIDER_SLOW_MESSAGE } from "@/lib/ai/generation-deadline";
 import { parseRetryAfterValue } from "@/lib/async/pool";
 import { cvPdfFilename } from "@/lib/pdf/filename";
+import type { Brief } from "@/lib/schemas/brief";
 import type { Artifact, ArtifactOutput, Cv, GenerateResponse, Salary } from "@/lib/schemas/outputs";
 
 /**
@@ -93,6 +94,17 @@ export interface GeneratePayload {
   achievements: string;
   /** Texto do PDF opcional de conquistas. String vazia quando não houver arquivo. */
   achievementsDocument: string;
+  /** Perfil e vaga extraídos neste fluxo. Só existe em memória. */
+  brief?: Brief;
+}
+
+export async function fetchBrief(payload: Omit<GeneratePayload, "brief">, signal?: AbortSignal): Promise<Brief> {
+  try {
+    const response = await handle<{ brief: Brief }>(await postJson("/api/brief", payload, signal));
+    return response.brief;
+  } catch (error) {
+    throw errorFromFailedFetch(error, signal);
+  }
 }
 
 export async function generate<A extends Artifact>(

@@ -23,6 +23,10 @@ ${ANTI_AI_RULES}
 Tamanho: resumo do CV com 2 a 4 linhas.
 `.trim();
 
+/**
+ * O CV ATS usa o texto bruto. O perfil curto não guarda empresas, datas e bullets
+ * com a fidelidade que o template precisa repetir.
+ */
 export function buildCvPrompt({ resumeText, jobDescription, achievements, achievementsDocument }: PromptInput): string {
   return withAchievementsDocument(
     [
