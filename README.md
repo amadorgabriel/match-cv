@@ -151,7 +151,8 @@ As credenciais da Adzuna ficam no servidor. A tela mostra "Jobs by Adzuna" e o s
 
 1. Importe o repositório em https://vercel.com/new.
 2. Cadastre `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` e, para IA real, `MATCHCV_ENABLE_AI=true`. As variáveis do Langfuse são opcionais.
-3. Use Node.js 24.
+3. Para o rate limit durável, crie o Redis Upstash no Marketplace e conecte a este projeto. O passo a passo está na seção seguinte. Sem essas variáveis o limite continua em memória.
+4. Use Node.js 24.
 
 O plano Hobby é gratuito e vale para uso pessoal e não comercial.
 
@@ -159,8 +160,37 @@ O plano Hobby é gratuito e vale para uso pessoal e não comercial.
 
 - CSP com nonce em `src/proxy.ts` (`connect-src 'self'`, `frame-src 'self' blob:`, `object-src blob:`). `style-src` ainda tem `unsafe-inline`. Os outros headers de segurança ficam em `next.config.ts`.
 - A saída do modelo é texto puro, sem `dangerouslySetInnerHTML`.
-- Rate limit por IP, em memória, em todas as rotas de API. Em serverless o limite é por instância.
-- `logApiError` mascara `sk-`, `sk-ant-`, `sk-or-`, `AIza`, `Bearer`, `app_key` e a chave do request. A resposta de erro não devolve a chave nem o corpo.
+- Rate limit por IP em todas as rotas de API. Com Upstash Redis a janela deslizante vale entre instâncias. Sem as variáveis, ou se o Redis falha, o limite em memória desta instância assume.
+- `logApiError` e `logApiWarning` mascaram `sk-`, `sk-ant-`, `sk-or-`, `AIza`, `Bearer`, `app_key` e os segredos passados na chamada. A resposta de erro não devolve a chave nem o corpo.
+
+## Rate limit com Upstash Redis
+
+As rotas `/api` contam pedidos por IP no Upstash Redis (REST, `@upstash/redis` e `@upstash/ratelimit`) quando as credenciais existem. A janela é deslizante e o contador é o mesmo em todas as instâncias. A chave é `matchcv:rl:<rota>:<hash>`. O IP em claro não vai para o Redis: o que entra é o SHA-256, com o sal `RATE_LIMIT_IP_SALT` quando ele existe.
+
+A chamada sai da Vercel Function. A CSP da página continua com `connect-src 'self'`. A URL do Upstash não entra nela.
+
+### Criar o banco no Marketplace
+
+1. No projeto da Vercel, abra Storage (ou Integrations) e escolha Upstash Redis no Marketplace. Pelo CLI: `vercel integration add upstash`.
+2. Conecte o banco a este projeto, em Production e Preview. A integração grava as variáveis.
+3. O app lê o par `KV_REST_API_URL` e `KV_REST_API_TOKEN`, que é o nome usado pela integração do Marketplace. Se esse par não estiver completo, lê `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN`. Um par não completa o outro.
+4. Opcional: defina `RATE_LIMIT_IP_SALT` com uma string longa e aleatória. Sem ela o hash ainda acontece, só que sem sal.
+5. Faça um novo deploy. No ambiente local, copie as variáveis para o `.env.local` se quiser exercitar o Redis. Sem elas, `npm run dev` e os testes usam o limite em memória.
+
+Se o Redis falhar ou não responder em 1,5 s, a rota continua no ar. O limite em memória desta instância entra no lugar e o log recebe um aviso `rate_limit_fallback`, já passado pelo mascaramento.
+
+Ao estourar o limite a resposta é HTTP 429, com header `Retry-After` e o JSON `{ "error": { "code": "rate_limited", "message": "Muitas requisições. Tente de novo em instantes." } }`.
+
+| Rota | Prefixo | Pedidos na janela de 60 s | O próximo responde 429 |
+|---|---|---|---|
+| `/api/salary` | `matchcv:rl:salary` | 5 | 6º |
+| `/api/parse` | `matchcv:rl:parse` | 20 | 21º |
+| `/api/brief` | `matchcv:rl:brief` | 20 | 21º |
+| `/api/generate/[artifact]` | `matchcv:rl:generate` | 30 | 31º |
+| `/api/cv/pdf` | `matchcv:rl:cv-pdf` | 30 | 31º |
+| `/api/key/validate` | `matchcv:rl:key-validate` | 10 | 11º |
+
+Num disparo seguido, com a janela anterior vazia, o pedido da última coluna recebe 429. Perto da fronteira da janela, o peso da janela anterior também conta.
 
 ## Fora deste código
 

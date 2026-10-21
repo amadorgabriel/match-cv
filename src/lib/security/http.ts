@@ -13,8 +13,13 @@ export function jsonOk(data: unknown, init?: ResponseInit): Response {
   return Response.json(data, { ...init, headers: { "Cache-Control": "no-store", ...init?.headers } });
 }
 
-export function checkRateLimit(req: Request, route: string, limit: number, windowMs = 60_000): Response | null {
-  const { ok, retryAfterSec } = rateLimit(`${route}:${clientIp(req)}`, limit, windowMs);
+export async function checkRateLimit(
+  req: Request,
+  route: string,
+  limit: number,
+  windowMs = 60_000,
+): Promise<Response | null> {
+  const { ok, retryAfterSec } = await rateLimit(route, clientIp(req), limit, windowMs);
   return ok
     ? null
     : jsonError(429, "rate_limited", "Muitas requisições. Tente de novo em instantes.", {

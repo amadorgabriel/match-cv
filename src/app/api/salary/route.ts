@@ -30,7 +30,7 @@ function unavailable(jobTitle: string): Salary {
  * Sem número, responde 200 com "faixa não disponível". 429 do provedor sobe como 429.
  */
 export async function POST(req: Request) {
-  const limited = checkRateLimit(req, "salary", 5);
+  const limited = await checkRateLimit(req, "salary", 5);
   if (limited) return limited;
 
   const parsed = await readJson(req, SalaryRequestSchema, 40_000);

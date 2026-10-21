@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { logApiError, logModelUsage, redactSecrets } from "./redact";
+import { logApiError, logApiWarning, logModelUsage, redactSecrets } from "./redact";
 
 describe("redactSecrets", () => {
   it("esconde sk-, AIza, Bearer, app_key e a chave do request", () => {
@@ -54,6 +54,18 @@ describe("logModelUsage", () => {
     expect(line).not.toContain("Vaga secreta");
     expect(line).not.toContain("sk-or-");
     expect(line).not.toContain("apiKey");
+    spy.mockRestore();
+  });
+});
+
+describe("logApiWarning", () => {
+  it("mascara o segredo antes do console.warn", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const token = "upstash-token-super-secret-value";
+    logApiWarning(`redis down token=${token}`, [token]);
+    const line = String(spy.mock.calls[0]?.[0]);
+    expect(line).toContain("[redacted]");
+    expect(line).not.toContain(token);
     spy.mockRestore();
   });
 });

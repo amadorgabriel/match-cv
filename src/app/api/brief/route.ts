@@ -15,7 +15,7 @@ export const maxDuration = 120;
  * Extrai perfil e vaga uma vez. A resposta não é persistida no servidor.
  */
 export async function POST(req: Request) {
-  const limited = checkRateLimit(req, "brief", 20);
+  const limited = await checkRateLimit(req, "brief", 20);
   if (limited) return limited;
 
   const parsed = await readJson(req, GenerateRequestSchema, GENERATE_REQUEST_MAX_BYTES);
