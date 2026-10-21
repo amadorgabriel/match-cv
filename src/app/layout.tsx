@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Nonce da CSP exige render no request. O layout inteiro fica dinâmico.
+export const instant = false;
+
 export const metadata: Metadata = {
   title: "MatchCV | Candidaturas para vagas de TI",
   description:
