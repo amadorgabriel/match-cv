@@ -1,4 +1,4 @@
-import { cvPdfFilename } from "@/lib/pdf/cv-document";
+import { contentDisposition, cvPdfFilename } from "@/lib/pdf/filename";
 import { cvToPdf } from "@/lib/pdf/cv-to-pdf";
 import { CvSchema } from "@/lib/schemas/outputs";
 import { checkRateLimit, jsonError, readJson } from "@/lib/security/http";
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     return new Response(Buffer.from(pdf), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${cvPdfFilename(parsed.data.fullName)}"`,
+        "Content-Disposition": contentDisposition(cvPdfFilename(parsed.data.fullName)),
         "Cache-Control": "no-store",
       },
     });

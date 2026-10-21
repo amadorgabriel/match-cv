@@ -1,5 +1,6 @@
 import type { ProviderId } from "@/lib/ai/catalog";
 import { parseRetryAfterValue } from "@/lib/async/pool";
+import { cvPdfFilename } from "@/lib/pdf/filename";
 import type { Artifact, ArtifactOutput, Cv, GenerateResponse, Salary } from "@/lib/schemas/outputs";
 
 /**
@@ -92,14 +93,14 @@ export async function fetchSalary(
   return handle(await postJson("/api/salary", input, signal));
 }
 
-export async function downloadCvPdf(cv: Cv): Promise<void> {
+export async function downloadCvPdf(cv: Cv, company?: string): Promise<void> {
   const res = await postJson("/api/cv/pdf", cv);
   if (!res.ok) await handle(res);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${cv.fullName.normalize("NFD").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "") || "cv"}-CV.pdf`;
+  a.download = cvPdfFilename(cv.fullName, company);
   document.body.appendChild(a);
   a.click();
   a.remove();

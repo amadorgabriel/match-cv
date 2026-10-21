@@ -205,6 +205,7 @@ export function MatchCvFlow() {
     return (
       <ResultsStep
         results={results}
+        jobDescription={values.jobDescription}
         steps={steps}
         isMock={Object.values(results).some((r) => r && typeof r === "object" && ("mock" in r ? r.mock : "isMock" in r && r.isMock))}
         regenerating={regenerating}

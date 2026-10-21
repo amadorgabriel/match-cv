@@ -46,11 +46,6 @@ const styles = StyleSheet.create({
   line: { marginBottom: 2 },
 });
 
-export function cvPdfFilename(fullName: string): string {
-  const safe = fullName.normalize("NFD").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "");
-  return `${safe || "cv"}-CV.pdf`;
-}
-
 /** CV de coluna única, fonte padrão e texto real. Sem tabela e sem imagem. */
 export function CvDocument({ cv }: { cv: Cv }) {
   const h = HEADINGS[cv.language] ?? HEADINGS["pt-BR"];

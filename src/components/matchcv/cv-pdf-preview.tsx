@@ -6,10 +6,11 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { downloadCvPdf } from "@/lib/client/api";
-import { CvDocument, cvPdfFilename } from "@/lib/pdf/cv-document";
+import { CvDocument } from "@/lib/pdf/cv-document";
+import { cvPdfFilename } from "@/lib/pdf/filename";
 import type { Cv } from "@/lib/schemas/outputs";
 
-export function CvPdfPreview({ cv }: { cv: Cv }) {
+export function CvPdfPreview({ cv, company }: { cv: Cv; company?: string }) {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -40,13 +41,13 @@ export function CvPdfPreview({ cv }: { cv: Cv }) {
       if (url) {
         const a = document.createElement("a");
         a.href = url;
-        a.download = cvPdfFilename(cv.fullName);
+        a.download = cvPdfFilename(cv.fullName, company);
         document.body.appendChild(a);
         a.click();
         a.remove();
         return;
       }
-      await downloadCvPdf(cv);
+      await downloadCvPdf(cv, company);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao gerar o PDF.");
     } finally {

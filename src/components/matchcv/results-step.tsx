@@ -17,12 +17,14 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Results } from "@/lib/client/api";
 import type { Artifact, Salary, ValidationReport } from "@/lib/schemas/outputs";
+import { analyzeJob } from "@/lib/salary/job";
 import { CopyButton } from "./copy-button";
 import { CvPdfPreview } from "./cv-pdf-preview";
 import type { StepId, StepState } from "./types";
 
 interface Props {
   results: Results;
+  jobDescription: string;
   steps: StepState[];
   isMock: boolean;
   regenerating: StepId | null;
@@ -194,8 +196,9 @@ function SalaryCard({ salary }: { salary: Salary }) {
   );
 }
 
-export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
+export function ResultsStep({ results, jobDescription, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
   const cv = results.cv?.data;
+  const company = analyzeJob({ jobDescription }).company;
   const missing = (id: Artifact | "salary") => (
     <NotGenerated id={id} steps={steps} regenerating={regenerating} onGenerate={() => onRegenerate(id)} />
   );
@@ -262,7 +265,7 @@ export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate
                     </ul>
                   </div>
                   <ValidationNotice report={results.cv?.validation} />
-                  <CvPdfPreview cv={cv} />
+                  <CvPdfPreview cv={cv} company={company} />
                 </>
               ) : (
                 missing("cv")
