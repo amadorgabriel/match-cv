@@ -3,8 +3,11 @@ import "server-only";
 import { generateText, Output } from "ai";
 import type { z } from "zod";
 
+import { withModelSpan } from "@/lib/ai/model-span";
 import { buildModel } from "@/lib/ai/providers";
+import { modelTelemetry, type ModelCallContext } from "@/lib/ai/telemetry-context";
 import { MOCK_OUTPUTS } from "@/lib/mock/outputs";
+import { logModelUsage } from "@/lib/security/redact";
 import {
   type Artifact,
   type ArtifactOutput,
@@ -73,15 +76,13 @@ function applyHumanizer<A extends Artifact>(
  * Gera um artefato. Com a IA desligada, devolve o mock (já passando pelo
  * validador). Com MATCHCV_ENABLE_AI=true, chama o modelo do usuário.
  *
- * TODO(IA):
- * - Etapa de análise (cargo, senioridade, palavras-chave) compartilhada.
- * - Checagem de fidelidade do CV (empresas, cargos e datas vs. CV original).
- * - Streaming de progresso por etapa.
+ * O perfil compartilhado, quando vem no request, alimenta e-mail, carta e entrevista.
+ * O CV continua com o texto bruto. Não há cache de prompt nem fusão de artefatos.
  */
 export async function generateArtifact<A extends Artifact>(
   artifact: A,
   input: GenerateRequest,
-  options: { realAi: boolean; abortSignal?: AbortSignal },
+  options: { realAi: boolean; abortSignal?: AbortSignal; telemetry?: ModelCallContext },
 ): Promise<GenerateResponse<A>> {
   const prompt = PROMPTS[artifact];
 
@@ -98,16 +99,38 @@ export async function generateArtifact<A extends Artifact>(
   const schema = ArtifactSchemas[artifact] as unknown as z.ZodType<ArtifactOutput[A]>;
   const userPrompt = prompt.build(input);
 
+  const baseCall = options.telemetry ?? {
+    sessionId: "none",
+    provider: input.provider,
+    model: input.model,
+    artifact,
+    attempt: "1",
+  };
+
   const run = async (extra?: string) => {
-    const { output } = await generateText({
-      model,
-      system: prompt.system,
-      prompt: extra ? `${userPrompt}\n\nREESCREVA CORRIGINDO ESTES PROBLEMAS:\n${extra}` : userPrompt,
-      output: Output.object({ schema }),
-      maxRetries: 1,
-      abortSignal: options.abortSignal,
+    const call = extra ? { ...baseCall, artifact: `${artifact}-humanize` } : baseCall;
+    const telemetry = modelTelemetry(call);
+    const result = await withModelSpan(call, () =>
+      generateText({
+        model,
+        system: prompt.system,
+        prompt: extra ? `${userPrompt}\n\nREESCREVA CORRIGINDO ESTES PROBLEMAS:\n${extra}` : userPrompt,
+        output: Output.object({ schema }),
+        maxOutputTokens: prompt.maxOutputTokens,
+        maxRetries: 1,
+        abortSignal: options.abortSignal,
+        experimental_telemetry: telemetry.experimental_telemetry,
+        telemetry: telemetry.telemetry,
+        runtimeContext: telemetry.runtimeContext,
+      }),
+    );
+    logModelUsage({
+      ...call,
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
+      totalTokens: result.usage.totalTokens,
     });
-    return output;
+    return result.output;
   };
 
   let raw = await run();

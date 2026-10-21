@@ -23,6 +23,8 @@ export interface StepState {
   label: string;
   status: StepStatus;
   error?: string;
+  /** Progresso enquanto a etapa roda (retry ou fonte salarial). */
+  detail?: string;
 }
 
 export const STEP_LABELS: Record<StepId, string> = {

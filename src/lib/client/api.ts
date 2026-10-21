@@ -1,4 +1,10 @@
 import type { ProviderId } from "@/lib/ai/catalog";
+import { ATTEMPT_HEADER, SESSION_HEADER } from "@/lib/ai/telemetry-context";
+import { anonymousSessionId } from "@/lib/client/session";
+import { PROVIDER_SLOW_MESSAGE } from "@/lib/ai/generation-deadline";
+import { parseRetryAfterValue } from "@/lib/async/pool";
+import { cvPdfFilename } from "@/lib/pdf/filename";
+import type { Brief } from "@/lib/schemas/brief";
 import type { Artifact, ArtifactOutput, Cv, GenerateResponse, Salary } from "@/lib/schemas/outputs";
 
 /**
@@ -11,29 +17,56 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     public code?: string,
+    public retryAfterSec?: number,
   ) {
     super(message);
   }
+}
+
+/** 429 e 5xx podem ser tentados de novo. Timeout e ausência de dado não. */
+export function isRetryableClientError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.code !== "provider_timeout" &&
+    error.code !== "no_data" &&
+    (error.status === 429 || error.status >= 500)
+  );
+}
+
+/** Conexão fechada sem HTTP (proxy de 30s, modelo travado). Não é cancelamento. */
+export function errorFromFailedFetch(error: unknown, signal?: AbortSignal): Error {
+  if (signal?.aborted) return error instanceof Error ? error : new Error("Aborted");
+  if (error instanceof ApiError) return error;
+  return new ApiError(PROVIDER_SLOW_MESSAGE, 0, "provider_timeout");
 }
 
 async function handle<T>(res: Response): Promise<T> {
   if (res.ok) return (await res.json()) as T;
   let message = "Algo deu errado. Tente de novo.";
   let code: string | undefined;
+  const text = await res.text();
   try {
-    const body = (await res.json()) as { error?: { message?: string; code?: string } };
+    const body = JSON.parse(text) as { error?: { message?: string; code?: string } };
     message = body.error?.message ?? message;
     code = body.error?.code;
   } catch {
-    // corpo não JSON
+    if (res.status === 500 || res.status === 502 || res.status === 504) {
+      message = PROVIDER_SLOW_MESSAGE;
+      code = "provider_timeout";
+    }
   }
-  throw new ApiError(message, res.status, code);
+  throw new ApiError(message, res.status, code, parseRetryAfterValue(res.headers.get("retry-after")));
 }
 
-function postJson(url: string, body: unknown, signal?: AbortSignal) {
+function postJson(url: string, body: unknown, signal?: AbortSignal, attempt?: number) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    [SESSION_HEADER]: anonymousSessionId(),
+  };
+  if (attempt && attempt > 0) headers[ATTEMPT_HEADER] = String(attempt);
   return fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
     signal,
     cache: "no-store",
@@ -45,7 +78,6 @@ export interface ParseResult {
   pages: number;
   chars: number;
   truncated: boolean;
-  empty: boolean;
 }
 
 export async function parseResume(file: File, signal?: AbortSignal): Promise<ParseResult> {
@@ -69,28 +101,52 @@ export interface GeneratePayload {
   achievements: string;
   /** Texto do PDF opcional de conquistas. String vazia quando não houver arquivo. */
   achievementsDocument: string;
+  /** Perfil e vaga extraídos neste fluxo. Só existe em memória. */
+  brief?: Brief;
+}
+
+export async function fetchBrief(payload: Omit<GeneratePayload, "brief">, signal?: AbortSignal, attempt?: number): Promise<Brief> {
+  try {
+    const response = await handle<{ brief: Brief }>(await postJson("/api/brief", payload, signal, attempt));
+    return response.brief;
+  } catch (error) {
+    throw errorFromFailedFetch(error, signal);
+  }
 }
 
 export async function generate<A extends Artifact>(
   artifact: A,
   payload: GeneratePayload,
   signal?: AbortSignal,
+  attempt?: number,
 ): Promise<GenerateResponse<A>> {
-  return handle(await postJson(`/api/generate/${artifact}`, payload, signal));
+  try {
+    return await handle(await postJson(`/api/generate/${artifact}`, payload, signal, attempt));
+  } catch (error) {
+    throw errorFromFailedFetch(error, signal);
+  }
 }
 
-export async function fetchSalary(jobDescription: string, signal?: AbortSignal): Promise<Salary> {
-  return handle(await postJson("/api/salary", { jobDescription }, signal));
+export async function fetchSalary(
+  input: { jobDescription: string; provider: ProviderId; model: string; apiKey: string },
+  signal?: AbortSignal,
+  attempt?: number,
+): Promise<Salary> {
+  try {
+    return await handle(await postJson("/api/salary", input, signal, attempt));
+  } catch (error) {
+    throw errorFromFailedFetch(error, signal);
+  }
 }
 
-export async function downloadCvPdf(cv: Cv): Promise<void> {
+export async function downloadCvPdf(cv: Cv, company?: string): Promise<void> {
   const res = await postJson("/api/cv/pdf", cv);
   if (!res.ok) await handle(res);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${cv.fullName.normalize("NFD").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "") || "cv"}-CV.pdf`;
+  a.download = cvPdfFilename(cv.fullName, company);
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -1,5 +1,6 @@
 import { ACHIEVEMENTS_DOCUMENT_RULE, withAchievementsDocument } from "./achievements-document";
 import { ANTI_AI_RULES } from "./anti-ai-rules";
+import { buildBriefedUserPrompt } from "./brief";
 import type { PromptInput } from "./types";
 
 export const COVER_LETTER_PROMPT_VERSION = "cover-letter@1.1.0";
@@ -20,7 +21,9 @@ ${ANTI_AI_RULES}
 Tamanho: até cerca de 350 palavras.
 `.trim();
 
-export function buildCoverLetterPrompt({ resumeText, jobDescription, achievements, achievementsDocument }: PromptInput): string {
+export function buildCoverLetterPrompt(input: PromptInput): string {
+  if (input.brief) return buildBriefedUserPrompt({ ...input, brief: input.brief });
+  const { resumeText, jobDescription, achievements, achievementsDocument } = input;
   return withAchievementsDocument(
     [
       "CURRÍCULO:",

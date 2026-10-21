@@ -116,6 +116,8 @@ export function mockSalary(jobTitle: string, location?: string): Salary {
     sampleSize: 0,
     isEstimate: true,
     isMock: true,
+    available: true,
+    confidence: "media",
     sources: [
       {
         name: "Adzuna",

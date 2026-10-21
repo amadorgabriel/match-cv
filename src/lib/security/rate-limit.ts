@@ -3,9 +3,11 @@ import "server-only";
 /**
  * Rate limit simples por IP, em memória (janela fixa).
  *
- * Limitação: em serverless cada instância tem a própria memória, então o
- * limite é aproximado. Para algo mais forte, troque por Upstash Redis
- * (@upstash/ratelimit) ou pelo Vercel Firewall.
+ * Limitação: cada instância serverless tem a própria memória. O limite é
+ * aproximado, zera no cold start e não se soma entre instâncias.
+ * Um limite durável precisaria de um store pago (Upstash, Vercel KV) ou de
+ * 'use cache: remote', que também cobra taxa de plataforma. Por isso o
+ * limite continua só em memória.
  */
 const buckets = new Map<string, { count: number; resetAt: number }>();
 

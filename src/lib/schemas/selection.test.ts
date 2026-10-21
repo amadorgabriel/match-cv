@@ -25,25 +25,28 @@ const none: OutputSelection = {
 };
 
 describe("seleção de materiais", () => {
-  it("vem com tudo marcado e inclui a leitura do PDF, os quatro textos e o salário", () => {
+  it("vem só com o CV marcado e inclui a leitura do PDF", () => {
+    expect(DEFAULT_OUTPUT_SELECTION).toEqual({
+      cv: true,
+      email: false,
+      "cover-letter": false,
+      interview: false,
+      salary: false,
+    });
     expect(OutputSelectionSchema.parse(DEFAULT_OUTPUT_SELECTION)).toEqual(DEFAULT_OUTPUT_SELECTION);
-    expect(processingStepsFor(DEFAULT_OUTPUT_SELECTION)).toEqual([
-      "parse",
-      "cv",
-      "email",
-      "cover-letter",
-      "interview",
-      "salary",
-    ]);
+    expect(processingStepsFor(DEFAULT_OUTPUT_SELECTION)).toEqual(["parse", "cv"]);
   });
 
-  it("pula o CV PDF e a faixa salarial quando esses itens estão desmarcados", () => {
-    expect(processingStepsFor({ ...DEFAULT_OUTPUT_SELECTION, cv: false, salary: false })).toEqual([
-      "parse",
-      "email",
-      "cover-letter",
-      "interview",
-    ]);
+  it("inclui e-mail, carta e entrevista quando esses itens estão marcados", () => {
+    expect(
+      processingStepsFor({
+        cv: false,
+        email: true,
+        "cover-letter": true,
+        interview: true,
+        salary: false,
+      }),
+    ).toEqual(["parse", "email", "cover-letter", "interview"]);
   });
 
   it("só consulta /api/salary quando a faixa salarial é o único material", () => {

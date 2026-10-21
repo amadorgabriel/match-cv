@@ -1,4 +1,5 @@
 import { ACHIEVEMENTS_DOCUMENT_RULE, withAchievementsDocument } from "./achievements-document";
+import { buildBriefedUserPrompt } from "./brief";
 import type { PromptInput } from "./types";
 
 export const INTERVIEW_PROMPT_VERSION = "interview@1.1.0";
@@ -17,7 +18,9 @@ Regras:
 - Escreva no idioma da vaga, em tom direto. Sem travessão e sem til antes de números.
 `.trim();
 
-export function buildInterviewPrompt({ resumeText, jobDescription, achievements, achievementsDocument }: PromptInput): string {
+export function buildInterviewPrompt(input: PromptInput): string {
+  if (input.brief) return buildBriefedUserPrompt({ ...input, brief: input.brief });
+  const { resumeText, jobDescription, achievements, achievementsDocument } = input;
   return withAchievementsDocument(
     [
       "CURRÍCULO:",

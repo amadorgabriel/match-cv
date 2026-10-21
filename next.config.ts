@@ -1,31 +1,11 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV === "development";
-// Só força HTTPS no deploy (Vercel); em `npm start` local o app roda em http://localhost.
-const isVercel = process.env.VERCEL === "1";
-
 /**
- * CSP básica sem nonce. Todo o tráfego de IA passa pelas rotas /api do
- * próprio app, então o navegador só fala com a mesma origem (connect-src 'self').
- * 'unsafe-inline' em script-src é exigido pelo Next sem nonce. Para uma CSP
- * mais rígida, migre para nonce via proxy.ts (ver docs do Next: Content Security Policy).
+ * A CSP com nonce fica em src/proxy.ts. Um segundo header CSP aqui
+ * cruzaria com o do proxy e recolocaria 'unsafe-inline' nos scripts.
+ * frame-src e object-src com blob: também estão no proxy, para a prévia do CV.
  */
-const csp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  ...(isVercel ? ["upgrade-insecure-requests"] : []),
-].join("; ");
-
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "no-referrer" },
@@ -37,9 +17,15 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   cacheComponents: true,
+  experimental: {
+    // O proxy do next dev corta a rota em 30s e o navegador mostra
+    // net::ERR_EMPTY_RESPONSE. Modelo gratuito passa disso. 130s fica
+    // acima do prazo da geração (100s) e do maxDuration (120s).
+    proxyTimeout: 130_000,
+  },
   partialPrefetching: true,
   // unpdf traz o pdf.js; manter fora do bundle do servidor.
-  serverExternalPackages: ["unpdf"],
+  serverExternalPackages: ["unpdf", "@react-pdf/renderer"],
   turbopack: {
     rules: {
       "*.css": {

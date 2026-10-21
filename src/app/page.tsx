@@ -48,8 +48,8 @@ export default function Home() {
         <div className="text-sm">
           <p className="font-medium">Sua chave não é salva</p>
           <p className="text-muted-foreground mt-1">
-            Você usa sua própria API key (OpenAI, Anthropic, Gemini, Together ou OpenRouter). Ela fica só na memória da
-            página, vai por HTTPS para a geração e é descartada em seguida. O currículo também não é armazenado.
+            Você usa uma API key gratuita do Google Gemini ou da OpenRouter. Ela fica só na memória da página, vai por
+            HTTPS para a geração e é descartada em seguida. O currículo também não é armazenado.
           </p>
         </div>
       </section>

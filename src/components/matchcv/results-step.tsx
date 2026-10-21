@@ -3,7 +3,6 @@
 import {
   AlertTriangleIcon,
   BriefcaseIcon,
-  DownloadIcon,
   FileTextIcon,
   LoaderCircleIcon,
   MailIcon,
@@ -11,22 +10,23 @@ import {
   RefreshCwIcon,
   WalletIcon,
 } from "lucide-react";
-import { useState } from "react";
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { downloadCvPdf, type Results } from "@/lib/client/api";
+import type { Results } from "@/lib/client/api";
 import type { Artifact, Salary, ValidationReport } from "@/lib/schemas/outputs";
-import { OUTPUT_IDS, type OutputId, type OutputSelection } from "@/lib/schemas/requests";
-
+import { glassdoorSalaryLinkLabel, glassdoorSalarySearchUrl } from "@/lib/salary/glassdoor";
+import { analyzeJob } from "@/lib/salary/job";
 import { CopyButton } from "./copy-button";
+import { CoverLetterPdf } from "./cover-letter-pdf";
+import { CvPdfPreview } from "./cv-pdf-preview";
 import type { StepId, StepState } from "./types";
 
 interface Props {
-  outputs: OutputSelection;
   results: Results;
+  jobDescription: string;
   steps: StepState[];
   isMock: boolean;
   regenerating: StepId | null;
@@ -61,6 +61,32 @@ function ValidationNotice({ report }: { report?: ValidationReport }) {
   );
 }
 
+function NotGenerated({
+  id,
+  steps,
+  regenerating,
+  onGenerate,
+}: {
+  id: Artifact | "salary";
+  steps: StepState[];
+  regenerating: StepId | null;
+  onGenerate: () => void;
+}) {
+  const running = regenerating === id;
+  const detail = steps.find((step) => step.id === id)?.detail;
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <p className="text-sm">Este conteúdo não foi gerado.</p>
+      <Button onClick={onGenerate} disabled={regenerating !== null}>
+        {running ? <LoaderCircleIcon className="animate-spin" /> : null}
+        Gerar
+      </Button>
+      {running && detail ? <p className="text-muted-foreground text-sm">{detail}</p> : null}
+      <StepError steps={steps} id={id} />
+    </div>
+  );
+}
+
 function RegenerateButton({ id, regenerating, onClick }: { id: Artifact | "salary"; regenerating: StepId | null; onClick: () => void }) {
   return (
     <Button variant="ghost" size="sm" onClick={onClick} disabled={regenerating !== null}>
@@ -83,64 +109,125 @@ function Paragraphs({ text }: { text: string }) {
   );
 }
 
-function SalaryCard({ salary }: { salary: Salary }) {
-  const period = salary.period === "month" ? "por mês" : "por ano";
+const CONFIDENCE_LABEL = { alta: "Alta", media: "Média", baixa: "Baixa" } as const;
+
+function sourceDomain(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function SalarySources({ salary }: { salary: Salary }) {
+  const showsAdzuna = salary.sources.some((source) => source.name.toLowerCase() === "adzuna");
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[
-          ["Mínimo", salary.min],
-          ["Mediana", salary.median],
-          ["Máximo", salary.max],
-        ].map(([label, value]) => (
-          <div key={label as string} className="bg-muted/50 rounded-lg p-4">
-            <p className="text-muted-foreground text-xs uppercase">{label}</p>
-            <p className="text-lg font-semibold">{typeof value === "number" ? brl(value, salary.currency) : "n/d"}</p>
-            <p className="text-muted-foreground text-xs">{period}</p>
-          </div>
-        ))}
-      </div>
-      <p className="text-muted-foreground text-sm">
-        Busca: <strong>{salary.query.jobTitle}</strong>
-        {salary.query.location ? ` em ${salary.query.location}` : ""}
-        {salary.sampleSize ? `, com base em ${salary.sampleSize} anúncios` : ""}.
-      </p>
-      <p className="text-muted-foreground text-xs">{salary.disclaimer}</p>
-      <div className="border-t pt-3 text-sm">
-        Fonte:{" "}
-        {salary.sources.map((s) => (
-          <span key={s.url}>
-            <a href={s.url} target="_blank" rel="noreferrer noopener" className="font-medium underline underline-offset-2">
-              {s.name}
-            </a>
-            {s.note ? <span className="text-muted-foreground"> ({s.note})</span> : null}
-          </span>
-        ))}
-        <p className="text-muted-foreground mt-1 text-xs">Jobs by Adzuna. Estimativas salariais: Adzuna Jobsworth.</p>
-      </div>
+    <div className="border-t pt-3 text-sm">
+      {salary.sources.length > 0 ? (
+        <ul className="flex flex-col gap-2">
+          {salary.sources.map((source) => {
+            const domain = sourceDomain(source.url);
+            const showDomain = domain && domain.toLowerCase() !== source.name.trim().toLowerCase();
+            return (
+              <li key={source.url}>
+                <a href={source.url} target="_blank" rel="noreferrer noopener" className="font-medium underline underline-offset-2">
+                  {source.name}
+                </a>
+                {showDomain ? <span className="text-muted-foreground"> · {domain}</span> : null}
+                {source.date ? <span className="text-muted-foreground"> · {source.date}</span> : null}
+                {source.note ? <span className="text-muted-foreground"> ({source.note})</span> : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">Nenhuma fonte devolveu um link desta vez.</p>
+      )}
+      {showsAdzuna ? <p className="text-muted-foreground mt-2 text-xs">Jobs by Adzuna. Estimativas salariais: Adzuna Jobsworth.</p> : null}
     </div>
   );
 }
 
-export function ResultsStep({ outputs, results, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
-  const [downloading, setDownloading] = useState(false);
-  const [pdfError, setPdfError] = useState<string | null>(null);
-  const cv = results.cv?.data;
-  const visibleTabs = OUTPUT_IDS.filter((id) => outputs[id]);
-  const defaultTab: OutputId | undefined = visibleTabs[0];
+function GlassdoorSalaryLink({ company, jobTitle }: { company?: string; jobTitle?: string }) {
+  const href = glassdoorSalarySearchUrl({ company, jobTitle });
+  if (!href) return null;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex text-sm font-medium underline underline-offset-2">
+      {glassdoorSalaryLinkLabel({ company, jobTitle })}
+    </a>
+  );
+}
 
-  async function download() {
-    if (!cv) return;
-    setDownloading(true);
-    setPdfError(null);
-    try {
-      await downloadCvPdf(cv);
-    } catch (err) {
-      setPdfError(err instanceof Error ? err.message : "Falha ao gerar o PDF.");
-    } finally {
-      setDownloading(false);
-    }
-  }
+function SalaryCard({ salary }: { salary: Salary }) {
+  const unavailable = salary.available === false || salary.min === undefined || salary.max === undefined;
+  const period = salary.period === "month" ? "por mês" : "por ano";
+  return (
+    <div className="flex flex-col gap-4">
+      {unavailable ? (
+        <div className="rounded-lg border p-4">
+          <p className="font-medium">Faixa não disponível</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Consultamos as fontes desta vaga e não houve números suficientes para montar uma faixa.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            ["Mínimo", salary.min],
+            ["Mediana", salary.median],
+            ["Máximo", salary.max],
+          ].map(([label, value]) => (
+            <div key={label as string} className="bg-muted/50 rounded-lg p-4">
+              <p className="text-muted-foreground text-xs uppercase">{label}</p>
+              <p className="text-lg font-semibold">{typeof value === "number" ? brl(value, salary.currency) : "n/d"}</p>
+              <p className="text-muted-foreground text-xs">{period}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {salary.confidence ? (
+          <span className="bg-muted rounded-full px-2 py-0.5 text-xs font-medium">Confiança {CONFIDENCE_LABEL[salary.confidence]}</span>
+        ) : null}
+        {salary.contract ? <span className="text-muted-foreground text-xs">Vínculo: {salary.contract}</span> : null}
+      </div>
+      <p className="text-muted-foreground text-sm">
+        Busca: <strong>{salary.query.jobTitle}</strong>
+        {salary.query.company ? ` na ${salary.query.company}` : ""}
+        {salary.query.location ? ` em ${salary.query.location}` : ""}
+        {salary.sampleSize ? `, com base em ${salary.sampleSize} anúncios` : ""}.
+      </p>
+      {salary.query.matchedQuery ? (
+        <p className="text-muted-foreground text-sm">Consulta que encontrou a faixa: {salary.query.matchedQuery}.</p>
+      ) : null}
+      {salary.similarRoleNote ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          {salary.similarRoleNote}
+        </p>
+      ) : null}
+      <GlassdoorSalaryLink company={salary.query.company} jobTitle={salary.query.comparedRole || salary.query.jobTitle} />
+      {salary.tried && salary.tried.length > 0 ? (
+        <div>
+          <p className="text-sm font-medium">O que foi consultado</p>
+          <ul className="text-muted-foreground mt-1 list-disc pl-4 text-sm">
+            {salary.tried.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <p className="text-muted-foreground text-xs">{salary.disclaimer}</p>
+      <SalarySources salary={salary} />
+    </div>
+  );
+}
+
+export function ResultsStep({ results, jobDescription, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
+  const cv = results.cv?.data;
+  const company = analyzeJob({ jobDescription }).company;
+  const missing = (id: Artifact | "salary") => (
+    <NotGenerated id={id} steps={steps} regenerating={regenerating} onGenerate={() => onRegenerate(id)} />
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -167,29 +254,30 @@ export function ResultsStep({ outputs, results, steps, isMock, regenerating, onR
         </div>
       )}
 
-      {defaultTab ? (
-      <Tabs defaultValue={defaultTab}>
+      <Tabs defaultValue="cv">
         <TabsList className="flex h-auto w-full flex-wrap">
-          {outputs.cv ? <TabsTrigger value="cv"><FileTextIcon />CV ATS</TabsTrigger> : null}
-          {outputs.email ? <TabsTrigger value="email"><MailIcon />E-mail</TabsTrigger> : null}
-          {outputs["cover-letter"] ? <TabsTrigger value="cover-letter"><BriefcaseIcon />Cover letter</TabsTrigger> : null}
-          {outputs.interview ? <TabsTrigger value="interview"><MessagesSquareIcon />Entrevista</TabsTrigger> : null}
-          {outputs.salary ? <TabsTrigger value="salary"><WalletIcon />Faixa salarial</TabsTrigger> : null}
+          <TabsTrigger value="cv"><FileTextIcon />CV ATS</TabsTrigger>
+          <TabsTrigger value="email"><MailIcon />E-mail</TabsTrigger>
+          <TabsTrigger value="cover-letter"><BriefcaseIcon />Cover letter</TabsTrigger>
+          <TabsTrigger value="interview"><MessagesSquareIcon />Entrevista</TabsTrigger>
+          <TabsTrigger value="salary"><WalletIcon />Faixa salarial</TabsTrigger>
         </TabsList>
 
-        {outputs.cv ? <TabsContent value="cv">
+        <TabsContent value="cv">
           <Card>
             <CardHeader>
               <CardTitle>CV compatível com ATS</CardTitle>
               <CardDescription>Coluna única, fonte padrão e texto selecionável.</CardDescription>
-              <CardAction>
-                <RegenerateButton id="cv" regenerating={regenerating} onClick={() => onRegenerate("cv")} />
-              </CardAction>
+              {cv ? (
+                <CardAction>
+                  <RegenerateButton id="cv" regenerating={regenerating} onClick={() => onRegenerate("cv")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <StepError steps={steps} id="cv" />
-              {cv && (
+              {cv ? (
                 <>
+                  <StepError steps={steps} id="cv" />
                   <div className="rounded-lg border p-4 text-sm">
                     <p className="text-base font-semibold">{cv.fullName}</p>
                     <p className="text-muted-foreground">{cv.headline}</p>
@@ -203,111 +291,135 @@ export function ResultsStep({ outputs, results, steps, isMock, regenerating, onR
                     </ul>
                   </div>
                   <ValidationNotice report={results.cv?.validation} />
-                  <div>
-                    <Button onClick={download} disabled={downloading}>
-                      {downloading ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
-                      Baixar CV em PDF
-                    </Button>
-                    {pdfError && <p className="text-destructive mt-2 text-sm">{pdfError}</p>}
-                  </div>
+                  <CvPdfPreview cv={cv} company={company} />
                 </>
+              ) : (
+                missing("cv")
               )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
 
-        {outputs.email ? <TabsContent value="email">
+        <TabsContent value="email">
           <Card>
             <CardHeader>
               <CardTitle>E-mail para a empresa</CardTitle>
-              <CardDescription>{results.email ? `Assunto: ${results.email.data.subject}` : ""}</CardDescription>
-              <CardAction className="flex gap-1">
-                {results.email && (
+              <CardDescription>{results.email ? `Assunto: ${results.email.data.subject}` : "Mensagem curta para enviar com o currículo."}</CardDescription>
+              {results.email ? (
+                <CardAction className="flex gap-1">
                   <CopyButton text={`Assunto: ${results.email.data.subject}\n\n${results.email.data.body}`} />
-                )}
-                <RegenerateButton id="email" regenerating={regenerating} onClick={() => onRegenerate("email")} />
-              </CardAction>
+                  <RegenerateButton id="email" regenerating={regenerating} onClick={() => onRegenerate("email")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <StepError steps={steps} id="email" />
-              {results.email && <Paragraphs text={results.email.data.body} />}
-              <ValidationNotice report={results.email?.validation} />
+              {results.email ? (
+                <>
+                  <StepError steps={steps} id="email" />
+                  <Paragraphs text={results.email.data.body} />
+                  <ValidationNotice report={results.email.validation} />
+                </>
+              ) : (
+                missing("email")
+              )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
 
-        {outputs["cover-letter"] ? <TabsContent value="cover-letter">
+        <TabsContent value="cover-letter">
           <Card>
             <CardHeader>
               <CardTitle>Cover letter</CardTitle>
               <CardDescription>Até cerca de 350 palavras, em parágrafos.</CardDescription>
-              <CardAction className="flex gap-1">
-                {results["cover-letter"] && <CopyButton text={results["cover-letter"].data.body} />}
-                <RegenerateButton id="cover-letter" regenerating={regenerating} onClick={() => onRegenerate("cover-letter")} />
-              </CardAction>
+              {results["cover-letter"] ? (
+                <CardAction className="flex gap-1">
+                  <CopyButton text={results["cover-letter"].data.body} />
+                  <RegenerateButton id="cover-letter" regenerating={regenerating} onClick={() => onRegenerate("cover-letter")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <StepError steps={steps} id="cover-letter" />
-              {results["cover-letter"] && <Paragraphs text={results["cover-letter"].data.body} />}
-              <ValidationNotice report={results["cover-letter"]?.validation} />
+              {results["cover-letter"] ? (
+                <>
+                  <StepError steps={steps} id="cover-letter" />
+                  <Paragraphs text={results["cover-letter"].data.body} />
+                  <CoverLetterPdf body={results["cover-letter"].data.body} fullName={cv?.fullName} company={company} />
+                  <ValidationNotice report={results["cover-letter"].validation} />
+                </>
+              ) : (
+                missing("cover-letter")
+              )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
 
-        {outputs.interview ? <TabsContent value="interview">
+        <TabsContent value="interview">
           <Card>
             <CardHeader>
               <CardTitle>Roteiro de entrevista</CardTitle>
               <CardDescription>Abra cada seção para ver as perguntas e as respostas sugeridas.</CardDescription>
-              <CardAction>
-                <RegenerateButton id="interview" regenerating={regenerating} onClick={() => onRegenerate("interview")} />
-              </CardAction>
+              {results.interview ? (
+                <CardAction>
+                  <RegenerateButton id="interview" regenerating={regenerating} onClick={() => onRegenerate("interview")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent>
-              <StepError steps={steps} id="interview" />
-              {results.interview && (
-                <Accordion multiple defaultValue={[results.interview.data.sections[0]?.title]}>
-                  {results.interview.data.sections.map((section) => (
-                    <AccordionItem key={section.title} value={section.title}>
-                      <AccordionTrigger>
-                        {section.title} ({section.items.length})
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <ul className="flex flex-col gap-4">
-                          {section.items.map((item, i) => (
-                            <li key={i}>
-                              <p className="font-medium">{item.question}</p>
-                              {item.suggestedAnswer && <p className="text-muted-foreground mt-1">{item.suggestedAnswer}</p>}
-                              {item.notes && <p className="mt-1 text-amber-700 dark:text-amber-300">{item.notes}</p>}
-                            </li>
-                          ))}
-                        </ul>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+              {results.interview ? (
+                <>
+                  <StepError steps={steps} id="interview" />
+                  <Accordion multiple defaultValue={[results.interview.data.sections[0]?.title]}>
+                    {results.interview.data.sections.map((section) => (
+                      <AccordionItem key={section.title} value={section.title}>
+                        <AccordionTrigger>
+                          {section.title} ({section.items.length})
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <ul className="flex flex-col gap-4">
+                            {section.items.map((item, i) => (
+                              <li key={i}>
+                                <p className="font-medium">{item.question}</p>
+                                {item.suggestedAnswer && <p className="text-muted-foreground mt-1">{item.suggestedAnswer}</p>}
+                                {item.notes && <p className="mt-1 text-amber-700 dark:text-amber-300">{item.notes}</p>}
+                              </li>
+                            ))}
+                          </ul>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </>
+              ) : (
+                missing("interview")
               )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
 
-        {outputs.salary ? <TabsContent value="salary">
+        <TabsContent value="salary">
           <Card>
             <CardHeader>
               <CardTitle>Faixa salarial estimada</CardTitle>
-              <CardDescription>Baseada em anúncios de vagas publicados na Adzuna.</CardDescription>
-              <CardAction>
-                <RegenerateButton id="salary" regenerating={regenerating} onClick={() => onRegenerate("salary")} />
-              </CardAction>
+              <CardDescription>Adzuna e, quando o provedor permite, busca pública na web. Sem número, a faixa fica indisponível.</CardDescription>
+              {results.salary ? (
+                <CardAction>
+                  <RegenerateButton id="salary" regenerating={regenerating} onClick={() => onRegenerate("salary")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent>
-              <StepError steps={steps} id="salary" />
-              {results.salary && <SalaryCard salary={results.salary} />}
+              {results.salary ? (
+                <>
+                  <StepError steps={steps} id="salary" />
+                  <SalaryCard salary={results.salary} />
+                </>
+              ) : (
+                missing("salary")
+              )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
       </Tabs>
-      ) : null}
     </div>
   );
 }

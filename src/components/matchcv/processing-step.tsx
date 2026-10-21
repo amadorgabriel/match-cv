@@ -51,13 +51,16 @@ export function ProcessingStep({ steps, onCancel }: { steps: StepState[]; onCanc
         <CardContent>
           <ul className="flex flex-col gap-3">
             {steps.map((s) => (
-              <li key={s.id} className="flex items-center gap-3 text-sm">
-                {s.status === "done" && <CheckCircle2Icon className="size-4 text-emerald-600" />}
-                {s.status === "running" && <LoaderCircleIcon className="text-primary size-4 animate-spin" />}
-                {s.status === "pending" && <CircleIcon className="text-muted-foreground size-4" />}
-                {s.status === "error" && <XCircleIcon className="text-destructive size-4" />}
-                <span className={s.status === "pending" ? "text-muted-foreground" : ""}>{s.label}</span>
-                {s.error && <span className="text-destructive ml-auto text-xs">{s.error}</span>}
+              <li key={s.id} className="flex items-start gap-3 text-sm">
+                {s.status === "done" && <CheckCircle2Icon className="mt-0.5 size-4 text-emerald-600" />}
+                {s.status === "running" && <LoaderCircleIcon className="text-primary mt-0.5 size-4 animate-spin" />}
+                {s.status === "pending" && <CircleIcon className="text-muted-foreground mt-0.5 size-4" />}
+                {s.status === "error" && <XCircleIcon className="text-destructive mt-0.5 size-4" />}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className={s.status === "pending" ? "text-muted-foreground" : ""}>{s.label}</span>
+                  {s.status === "running" && s.detail ? <span className="text-muted-foreground text-xs">{s.detail}</span> : null}
+                </span>
+                {s.error && <span className="text-destructive text-xs">{s.error}</span>}
               </li>
             ))}
           </ul>
