@@ -17,36 +17,45 @@ export function CoverLetterPdf({
   fullName?: string;
   company?: string;
 }) {
+  const previewKey = `${fullName ?? ""}\0${company ?? ""}\0${body}`;
+  const [requestedKey, setRequestedKey] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const current = requestedKey === previewKey;
 
   useEffect(() => {
+    if (!current || !requestedKey) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    pdf(<CoverLetterDocument body={body} fullName={fullName} company={company} />)
+      .toBlob()
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+        setBusy(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError("Não foi possível montar o PDF da cover letter.");
+        setBusy(false);
+      });
     return () => {
-      if (url) URL.revokeObjectURL(url);
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [url]);
+  }, [body, company, current, fullName, requestedKey]);
 
-  useEffect(() => {
+  function convert() {
+    setError(null);
     setUrl(null);
-    setError(null);
-  }, [body, fullName, company]);
-
-  async function convert() {
     setBusy(true);
-    setError(null);
-    try {
-      const blob = await pdf(<CoverLetterDocument body={body} fullName={fullName} company={company} />).toBlob();
-      setUrl(URL.createObjectURL(blob));
-    } catch {
-      setError("Não foi possível montar o PDF da cover letter.");
-    } finally {
-      setBusy(false);
-    }
+    setRequestedKey(previewKey);
   }
 
   function download() {
-    if (!url) return;
+    if (!url || !current) return;
     const a = document.createElement("a");
     a.href = url;
     a.download = coverLetterPdfFilename(fullName, company);
@@ -55,23 +64,26 @@ export function CoverLetterPdf({
     a.remove();
   }
 
+  const visibleUrl = current ? url : null;
+  const visibleError = current ? error : null;
+
   return (
     <div className="flex flex-col items-start gap-3">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={convert} disabled={busy}>
-          {busy ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
+        <Button type="button" variant="outline" onClick={convert} disabled={busy && current}>
+          {busy && current ? <LoaderCircleIcon className="animate-spin" /> : <DownloadIcon />}
           Converter para PDF
         </Button>
-        {url ? (
+        {visibleUrl ? (
           <Button type="button" onClick={download}>
             <DownloadIcon />
             Baixar PDF
           </Button>
         ) : null}
       </div>
-      {error ? <p className="text-destructive text-sm">{error}</p> : null}
-      {url ? (
-        <iframe title="Prévia da cover letter" src={url} className="h-[32rem] w-full rounded-lg border bg-white" />
+      {visibleError ? <p className="text-destructive text-sm">{visibleError}</p> : null}
+      {visibleUrl ? (
+        <iframe title="Prévia da cover letter" src={visibleUrl} className="h-[32rem] w-full rounded-lg border bg-white" />
       ) : null}
     </div>
   );
