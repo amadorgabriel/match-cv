@@ -19,10 +19,27 @@ const geistMono = Geist_Mono({
 // Nonce da CSP exige render no request. O layout inteiro fica dinâmico.
 export const instant = false;
 
+const title = "MatchCV | Candidaturas para vagas de TI";
+const description =
+  "Envie seu currículo e a vaga e receba CV ATS em PDF, e-mail, cover letter, roteiro de entrevista e faixa salarial.";
+
 export const metadata: Metadata = {
-  title: "MatchCV | Candidaturas para vagas de TI",
-  description:
-    "Envie seu currículo e a vaga e receba CV ATS em PDF, e-mail, cover letter, roteiro de entrevista e faixa salarial.",
+  metadataBase: new URL("https://match-cv-app.vercel.app"),
+  title,
+  description,
+  openGraph: {
+    title,
+    description,
+    url: "/",
+    siteName: "MatchCV",
+    locale: "pt_BR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+  },
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
