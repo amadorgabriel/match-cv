@@ -9,7 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { isProviderId, PROVIDER_IDS, PROVIDERS, selectableModels, type ProviderId } from "@/lib/ai/catalog";
+import {
+  defaultSelectableProvider,
+  isProviderId,
+  isSelectableProvider,
+  PROVIDERS,
+  selectableModels,
+  selectableProviders,
+  type ProviderId,
+} from "@/lib/ai/catalog";
 import { validateKey } from "@/lib/client/api";
 import { clearStoredKey, parseStoredKey, readStoredKey, saveStoredKey, subscribeNoop } from "@/lib/client/key-storage";
 import { maskKey } from "@/lib/client/mask";
@@ -23,7 +31,8 @@ import {
 
 import type { FormValues } from "./types";
 
-const providerItems = Object.fromEntries(PROVIDER_IDS.map((id) => [id, PROVIDERS[id].label]));
+const VISIBLE_PROVIDERS = selectableProviders();
+const providerItems = Object.fromEntries(VISIBLE_PROVIDERS.map((provider) => [provider.id, provider.label]));
 
 const OUTPUT_OPTIONS: { id: OutputId; label: string }[] = [
   { id: "cv", label: "CV PDF" },
@@ -65,16 +74,20 @@ export function FormStep({ initial, onSubmit }: Props) {
     state: "idle",
   });
 
-  const storedProvider = stored && isProviderId(stored.provider) ? stored.provider : null;
-  const provider: ProviderId = providerInput ?? storedProvider ?? "openai";
+  const storedProvider =
+    stored && isProviderId(stored.provider) && isSelectableProvider(stored.provider) ? stored.provider : null;
+  const requestedProvider = providerInput ?? storedProvider ?? initial?.provider ?? null;
+  const provider: ProviderId =
+    requestedProvider && isProviderId(requestedProvider) && isSelectableProvider(requestedProvider)
+      ? requestedProvider
+      : defaultSelectableProvider();
   const providerInfo = PROVIDERS[provider];
   const models = useMemo(() => selectableModels(providerInfo), [providerInfo]);
   const storedModel = storedProvider === provider ? stored?.model : undefined;
   const requestedModel = modelInput ?? storedModel ?? providerInfo.defaultModel;
   const model = models.some((item) => item.id === requestedModel) ? requestedModel : providerInfo.defaultModel;
-  const apiKey = apiKeyInput ?? stored?.apiKey ?? "";
-  const remember = rememberInput ?? stored !== null;
-  const paidModels = providerInfo.models.filter((item) => item.paidOnly);
+  const apiKey = (storedProvider ? apiKeyInput ?? stored?.apiKey : apiKeyInput) ?? "";
+  const remember = rememberInput ?? storedProvider !== null;
 
   const modelItems = useMemo(
     () => Object.fromEntries(models.map((m) => [m.id, m.unverified ? `${m.label} (ID a confirmar)` : m.label])),
@@ -279,9 +292,9 @@ export function FormStep({ initial, onSubmit }: Props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PROVIDER_IDS.map((id) => (
-                    <SelectItem key={id} value={id}>
-                      {PROVIDERS[id].label}
+                  {VISIBLE_PROVIDERS.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -301,11 +314,6 @@ export function FormStep({ initial, onSubmit }: Props) {
                   ))}
                 </SelectContent>
               </Select>
-              {paidModels.map((m) => (
-                <p key={m.id} className="text-muted-foreground text-xs">
-                  {m.label}. Fora do seletor.
-                </p>
-              ))}
             </div>
           </div>
 
