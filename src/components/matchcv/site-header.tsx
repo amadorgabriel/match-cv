@@ -15,7 +15,7 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="text-muted-foreground border-t py-6 text-center text-xs">
-      MatchCV, projeto pessoal. Sua chave e seu currículo não são salvos. Dados salariais: Adzuna.
+      Sua chave e seu currículo não são salvos.
     </footer>
   );
 }
