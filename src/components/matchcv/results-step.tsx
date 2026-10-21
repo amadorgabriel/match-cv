@@ -17,6 +17,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Results } from "@/lib/client/api";
 import type { Artifact, Salary, ValidationReport } from "@/lib/schemas/outputs";
+import { glassdoorSalaryLinkLabel, glassdoorSalarySearchUrl } from "@/lib/salary/glassdoor";
 import { analyzeJob } from "@/lib/salary/job";
 import { CopyButton } from "./copy-button";
 import { CoverLetterPdf } from "./cover-letter-pdf";
@@ -147,6 +148,16 @@ function SalarySources({ salary }: { salary: Salary }) {
   );
 }
 
+function GlassdoorSalaryLink({ company, jobTitle }: { company?: string; jobTitle?: string }) {
+  const href = glassdoorSalarySearchUrl({ company, jobTitle });
+  if (!href) return null;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex text-sm font-medium underline underline-offset-2">
+      {glassdoorSalaryLinkLabel({ company, jobTitle })}
+    </a>
+  );
+}
+
 function SalaryCard({ salary }: { salary: Salary }) {
   const unavailable = salary.available === false || salary.min === undefined || salary.max === undefined;
   const period = salary.period === "month" ? "por mês" : "por ano";
@@ -158,6 +169,7 @@ function SalaryCard({ salary }: { salary: Salary }) {
           <p className="text-muted-foreground mt-1 text-sm">
             Consultamos as fontes desta vaga e não houve números suficientes para montar uma faixa.
           </p>
+          <GlassdoorSalaryLink company={salary.query.company} jobTitle={salary.query.jobTitle} />
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-3">
