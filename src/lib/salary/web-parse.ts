@@ -2,6 +2,11 @@ import type { Salary } from "@/lib/schemas/outputs";
 
 import type { SalaryContract, SalaryCurrency, SalaryObservation } from "./combine";
 
+export interface CitedUrl {
+  url: string;
+  title?: string;
+}
+
 export interface WebSalaryHit {
   found: boolean;
   observation?: SalaryObservation;
@@ -16,13 +21,12 @@ const CONTRACTS = new Set<SalaryContract>(["CLT", "PJ", "misto", "desconhecido"]
  * Converte o JSON do modelo em uma observação. Links fora de http(s) são
  * descartados: a busca nativa cita URLs, não raspa a página.
  */
-export function parseWebSalaryText(text: string, citedUrls: string[] = []): WebSalaryHit | null {
+export function parseWebSalaryText(text: string, citedUrls: Array<string | CitedUrl> = []): WebSalaryHit | null {
   const json = extractJson(text);
   if (!json || typeof json !== "object") return null;
   const record = json as Record<string, unknown>;
-  const parsedSources = readSources(record.sources);
-  const cited = citedUrls.filter(isHttp).map((url) => ({ name: hostName(url), url }));
-  const sources = mergeSources(parsedSources, cited);
+  // Só entram URLs que a ferramenta devolveu. O JSON do modelo não cria link.
+  const sources = sourcesFromCitations(citedUrls, readSources(record.sources));
   const found = record.found === true;
   const min = numberOrUndefined(record.min);
   const max = numberOrUndefined(record.max);
@@ -85,16 +89,35 @@ function readSources(value: unknown): Salary["sources"] {
   return sources;
 }
 
-function mergeSources(primary: Salary["sources"], extra: Salary["sources"]): Salary["sources"] {
-  const seen = new Set(primary.map((source) => source.url.replace(/\/$/, "")));
-  const merged = [...primary];
-  for (const source of extra) {
-    const key = source.url.replace(/\/$/, "");
+function sourcesFromCitations(citedUrls: Array<string | CitedUrl>, modelSources: Salary["sources"]): Salary["sources"] {
+  const sources: Salary["sources"] = [];
+  const seen = new Set<string>();
+  for (const item of citedUrls) {
+    const url = typeof item === "string" ? item : item.url;
+    const title = typeof item === "string" ? undefined : cleanText(item.title);
+    if (!isHttp(url)) continue;
+    const key = urlKey(url);
     if (seen.has(key)) continue;
     seen.add(key);
-    merged.push(source);
+    const match = modelSources.find((source) => urlKey(source.url) === key);
+    sources.push({
+      name: match?.name || title || hostName(url),
+      url,
+      date: match?.date,
+    });
   }
-  return merged;
+  return sources;
+}
+
+function urlKey(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    const path = parsed.pathname.replace(/\/$/, "");
+    return `${parsed.protocol}//${parsed.host}${path}${parsed.search}`;
+  } catch {
+    return url.replace(/\/$/, "");
+  }
 }
 
 function sourceNote(url: string, note: string | undefined, contract?: SalaryContract): string | undefined {

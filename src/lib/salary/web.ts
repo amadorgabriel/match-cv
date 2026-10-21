@@ -53,7 +53,9 @@ export async function searchWebSalary(input: {
       maxRetries: 0,
       abortSignal: input.signal,
     });
-    const cited = (result.sources ?? []).flatMap((source) => (source.sourceType === "url" ? [source.url] : []));
+    const cited = (result.sources ?? []).flatMap((source) =>
+      source.sourceType === "url" ? [{ url: source.url, title: source.title }] : [],
+    );
     return parseWebSalaryText(result.text, cited);
   } catch (error) {
     const failure = readProviderHttpFailure(error);

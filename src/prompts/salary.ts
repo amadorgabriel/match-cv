@@ -32,6 +32,7 @@ export const WEB_SALARY_PROMPT_VERSION = "web-salary@1.0.0";
 export const WEB_SALARY_SYSTEM = `
 Você pesquisa faixas salariais públicas de uma vaga de TI no Brasil.
 Use a ferramenta de busca na web do provedor. Não invente números, empresas, datas ou links.
+No JSON, cada url de sources tem de ser uma URL que a ferramenta devolveu. Não complete a lista com páginas que você já conhece.
 Não abra páginas por conta própria e não raspe sites. Use apenas o que a ferramenta devolver.
 Priorize, nesta ordem: página pública da empresa na Levels.fyi, guias Robert Half, Michael Page e Hays, e resultados de busca do Glassdoor, Indeed e Programathor só como links citados.
 A Levels.fyi publica remuneração total, não salário CLT. Diga isso na nota da fonte.

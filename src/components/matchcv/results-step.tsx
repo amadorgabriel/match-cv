@@ -109,21 +109,34 @@ function Paragraphs({ text }: { text: string }) {
 
 const CONFIDENCE_LABEL = { alta: "Alta", media: "Média", baixa: "Baixa" } as const;
 
+function sourceDomain(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
 function SalarySources({ salary }: { salary: Salary }) {
   const showsAdzuna = salary.sources.some((source) => source.name.toLowerCase() === "adzuna");
   return (
     <div className="border-t pt-3 text-sm">
       {salary.sources.length > 0 ? (
         <ul className="flex flex-col gap-2">
-          {salary.sources.map((source) => (
-            <li key={source.url}>
-              <a href={source.url} target="_blank" rel="noreferrer noopener" className="font-medium underline underline-offset-2">
-                {source.name}
-              </a>
-              {source.date ? <span className="text-muted-foreground"> · {source.date}</span> : null}
-              {source.note ? <span className="text-muted-foreground"> ({source.note})</span> : null}
-            </li>
-          ))}
+          {salary.sources.map((source) => {
+            const domain = sourceDomain(source.url);
+            const showDomain = domain && domain.toLowerCase() !== source.name.trim().toLowerCase();
+            return (
+              <li key={source.url}>
+                <a href={source.url} target="_blank" rel="noreferrer noopener" className="font-medium underline underline-offset-2">
+                  {source.name}
+                </a>
+                {showDomain ? <span className="text-muted-foreground"> · {domain}</span> : null}
+                {source.date ? <span className="text-muted-foreground"> · {source.date}</span> : null}
+                {source.note ? <span className="text-muted-foreground"> ({source.note})</span> : null}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="text-muted-foreground">Nenhuma fonte devolveu um link desta vez.</p>
