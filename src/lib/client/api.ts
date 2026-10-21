@@ -86,8 +86,11 @@ export async function generate<A extends Artifact>(
   return handle(await postJson(`/api/generate/${artifact}`, payload, signal));
 }
 
-export async function fetchSalary(jobDescription: string, signal?: AbortSignal): Promise<Salary> {
-  return handle(await postJson("/api/salary", { jobDescription }, signal));
+export async function fetchSalary(
+  input: { jobDescription: string; provider: ProviderId; model: string; apiKey: string },
+  signal?: AbortSignal,
+): Promise<Salary> {
+  return handle(await postJson("/api/salary", input, signal));
 }
 
 export async function downloadCvPdf(cv: Cv): Promise<void> {

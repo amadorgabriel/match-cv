@@ -65,23 +65,40 @@ export const InterviewSchema = z.object({
 });
 export type Interview = z.infer<typeof InterviewSchema>;
 
+export const SalarySourceSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  note: z.string().optional(),
+  /** Data citada pela fonte, quando houver. */
+  date: z.string().optional(),
+});
+
 export const SalarySchema = z.object({
   currency: z.string().default("BRL"),
   period: z.enum(["month", "year"]),
-  min: z.number(),
+  /** false quando nenhuma fonte trouxe números. A UI mostra "faixa não disponível". */
+  available: z.boolean().optional(),
+  min: z.number().optional(),
   median: z.number().optional(),
-  max: z.number(),
-  query: z.object({ jobTitle: z.string(), location: z.string().optional() }),
+  max: z.number().optional(),
+  /** alta: duas ou mais fontes concordantes; media: uma boa; baixa: só a web. */
+  confidence: z.enum(["alta", "media", "baixa"]).optional(),
+  /** CLT, PJ, misto ou o que a fonte indicou. */
+  contract: z.string().optional(),
+  query: z.object({
+    jobTitle: z.string(),
+    location: z.string().optional(),
+    company: z.string().optional(),
+    matchedQuery: z.string().optional(),
+  }),
+  /** Aviso quando a faixa é de um cargo parecido, não da vaga exata. */
+  similarRoleNote: z.string().optional(),
+  /** Consultas e fontes tentadas, inclusive quando não houve número. */
+  tried: z.array(z.string()).optional(),
   sampleSize: z.number().optional(),
   isEstimate: z.literal(true),
   isMock: z.boolean().default(false),
-  sources: z.array(
-    z.object({
-      name: z.string(),
-      url: z.string(),
-      note: z.string().optional(),
-    }),
-  ),
+  sources: z.array(SalarySourceSchema),
   disclaimer: z.string(),
 });
 export type Salary = z.infer<typeof SalarySchema>;

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { concurrencyForProvider, mapWithConcurrency, RETRY_ATTEMPTS, retryAsync, retryDelayMs } from "@/lib/async/pool";
 import { ApiError, fetchSalary, generate, isRetryableClientError, parseResume, type GeneratePayload, type Results } from "@/lib/client/api";
+import { analyzeJob, salaryProgressMessages } from "@/lib/salary/job";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
 import { DEFAULT_OUTPUT_SELECTION, processingStepsFor } from "@/lib/schemas/requests";
 
@@ -70,15 +71,50 @@ export function MatchCvFlow() {
     }
   }
 
-  async function runSalary(jobDescription: string, signal?: AbortSignal) {
-    setStep("salary", { status: "running", error: undefined });
+  async function runSalary(payload: GeneratePayload, signal?: AbortSignal) {
+    const messages = salaryProgressMessages(analyzeJob({ jobDescription: payload.jobDescription }));
+    let index = 0;
+    let hold = false;
+    setStep("salary", { status: "running", error: undefined, detail: messages[0] });
+    const timer = setInterval(() => {
+      if (hold) return;
+      index = Math.min(index + 1, messages.length - 1);
+      setStep("salary", { detail: messages[index] });
+    }, 1600);
     try {
-      const salary = await fetchSalary(jobDescription, signal);
+      const salary = await retryAsync(
+        () => {
+          hold = false;
+          return fetchSalary(
+            {
+              jobDescription: payload.jobDescription,
+              provider: payload.provider,
+              model: payload.model,
+              apiKey: payload.apiKey,
+            },
+            signal,
+          );
+        },
+        {
+          attempts: RETRY_ATTEMPTS,
+          signal,
+          shouldRetry: (error) => !signal?.aborted && isRetryableClientError(error),
+          delayMs: (error, attempt) => retryDelayMs(attempt, error instanceof ApiError ? error.retryAfterSec : undefined),
+          onRetry: ({ nextAttempt, delayMs, error }) => {
+            hold = true;
+            const seconds = Math.max(1, Math.ceil(delayMs / 1000));
+            const base = error instanceof ApiError && error.status === 429 ? error.message : `Tentando de novo em ${seconds} s`;
+            setStep("salary", { detail: `${base} (tentativa ${nextAttempt} de ${RETRY_ATTEMPTS})` });
+          },
+        },
+      );
       setResults((prev) => ({ ...prev, salary }));
-      setStep("salary", { status: "done" });
+      setStep("salary", { status: "done", detail: undefined });
     } catch (err) {
       if (signal?.aborted) return;
-      setStep("salary", { status: "error", error: errorMessage(err) });
+      setStep("salary", { status: "error", error: errorMessage(err), detail: undefined });
+    } finally {
+      clearInterval(timer);
     }
   }
 
@@ -134,7 +170,7 @@ export function MatchCvFlow() {
 
     const tasks: Array<() => Promise<void>> = [
       ...stepIds.filter(isArtifact).map((artifact) => () => runArtifact(artifact, payload, signal)),
-      ...(stepIds.includes("salary") ? [() => runSalary(v.jobDescription, signal)] : []),
+      ...(stepIds.includes("salary") ? [() => runSalary(payload, signal)] : []),
     ];
     await mapWithConcurrency(tasks, concurrencyForProvider(v.provider), (task) => task());
     if (!signal.aborted) setPhase("results");
@@ -145,7 +181,7 @@ export function MatchCvFlow() {
     if (!payload) return;
     setRegenerating(step);
     try {
-      if (step === "salary") await runSalary(payload.jobDescription);
+      if (step === "salary") await runSalary(payload);
       else await runArtifact(step, payload);
     } finally {
       setRegenerating(null);

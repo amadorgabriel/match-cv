@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { LanguageModel } from "ai";
+import type { LanguageModel, ToolSet } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -27,6 +27,61 @@ export const KEY_VALIDATION_ENDPOINTS: Record<ProviderId, string> = {
 };
 
 export class ProviderConfigError extends Error {}
+
+/** Busca nativa: OpenAI web search, Anthropic web search e Google Search grounding. */
+export function supportsNativeWebSearch(provider: ProviderId): boolean {
+  return provider === "openai" || provider === "anthropic" || provider === "google";
+}
+
+/**
+ * Monta o modelo e a ferramenta de busca na web com a chave do usuário.
+ * Together e OpenRouter não têm essa ferramenta e devolvem null.
+ * A chave não é logada. As baseURLs continuam só na allowlist.
+ */
+export function buildWebSearchRequest(
+  provider: ProviderId,
+  modelId: string,
+  apiKey: string,
+): { model: LanguageModel; tools: ToolSet } | null {
+  if (!isProviderId(provider) || !MODEL_ID_PATTERN.test(modelId) || !apiKey) return null;
+  if (!supportsNativeWebSearch(provider)) return null;
+
+  switch (provider) {
+    case "openai": {
+      const openai = createOpenAI({ apiKey });
+      return {
+        model: openai.responses(modelId),
+        tools: {
+          web_search: openai.tools.webSearch({
+            searchContextSize: "low",
+            userLocation: { type: "approximate", country: "BR" },
+          }),
+        },
+      };
+    }
+    case "anthropic": {
+      const anthropic = createAnthropic({ apiKey });
+      return {
+        model: anthropic(modelId),
+        tools: {
+          web_search: anthropic.tools.webSearch_20250305({
+            maxUses: 3,
+            userLocation: { type: "approximate", country: "BR", timezone: "America/Sao_Paulo" },
+          }),
+        },
+      };
+    }
+    case "google": {
+      const google = createGoogleGenerativeAI({ apiKey });
+      return {
+        model: google(modelId),
+        tools: { google_search: google.tools.googleSearch({}) },
+      };
+    }
+    default:
+      return null;
+  }
+}
 
 /**
  * Cria o modelo com a chave do usuário. Chame SEMPRE dentro do handler,

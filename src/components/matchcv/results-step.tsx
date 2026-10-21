@@ -83,41 +83,91 @@ function Paragraphs({ text }: { text: string }) {
   );
 }
 
+const CONFIDENCE_LABEL = { alta: "Alta", media: "Média", baixa: "Baixa" } as const;
+
+function SalarySources({ salary }: { salary: Salary }) {
+  const showsAdzuna = salary.sources.some((source) => source.name.toLowerCase() === "adzuna");
+  return (
+    <div className="border-t pt-3 text-sm">
+      {salary.sources.length > 0 ? (
+        <ul className="flex flex-col gap-2">
+          {salary.sources.map((source) => (
+            <li key={source.url}>
+              <a href={source.url} target="_blank" rel="noreferrer noopener" className="font-medium underline underline-offset-2">
+                {source.name}
+              </a>
+              {source.date ? <span className="text-muted-foreground"> · {source.date}</span> : null}
+              {source.note ? <span className="text-muted-foreground"> ({source.note})</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">Nenhuma fonte devolveu um link desta vez.</p>
+      )}
+      {showsAdzuna ? <p className="text-muted-foreground mt-2 text-xs">Jobs by Adzuna. Estimativas salariais: Adzuna Jobsworth.</p> : null}
+    </div>
+  );
+}
+
 function SalaryCard({ salary }: { salary: Salary }) {
+  const unavailable = salary.available === false || salary.min === undefined || salary.max === undefined;
   const period = salary.period === "month" ? "por mês" : "por ano";
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[
-          ["Mínimo", salary.min],
-          ["Mediana", salary.median],
-          ["Máximo", salary.max],
-        ].map(([label, value]) => (
-          <div key={label as string} className="bg-muted/50 rounded-lg p-4">
-            <p className="text-muted-foreground text-xs uppercase">{label}</p>
-            <p className="text-lg font-semibold">{typeof value === "number" ? brl(value, salary.currency) : "n/d"}</p>
-            <p className="text-muted-foreground text-xs">{period}</p>
-          </div>
-        ))}
+      {unavailable ? (
+        <div className="rounded-lg border p-4">
+          <p className="font-medium">Faixa não disponível</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Consultamos as fontes desta vaga e não houve números suficientes para montar uma faixa.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            ["Mínimo", salary.min],
+            ["Mediana", salary.median],
+            ["Máximo", salary.max],
+          ].map(([label, value]) => (
+            <div key={label as string} className="bg-muted/50 rounded-lg p-4">
+              <p className="text-muted-foreground text-xs uppercase">{label}</p>
+              <p className="text-lg font-semibold">{typeof value === "number" ? brl(value, salary.currency) : "n/d"}</p>
+              <p className="text-muted-foreground text-xs">{period}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {salary.confidence ? (
+          <span className="bg-muted rounded-full px-2 py-0.5 text-xs font-medium">Confiança {CONFIDENCE_LABEL[salary.confidence]}</span>
+        ) : null}
+        {salary.contract ? <span className="text-muted-foreground text-xs">Vínculo: {salary.contract}</span> : null}
       </div>
       <p className="text-muted-foreground text-sm">
         Busca: <strong>{salary.query.jobTitle}</strong>
+        {salary.query.company ? ` na ${salary.query.company}` : ""}
         {salary.query.location ? ` em ${salary.query.location}` : ""}
         {salary.sampleSize ? `, com base em ${salary.sampleSize} anúncios` : ""}.
       </p>
+      {salary.query.matchedQuery ? (
+        <p className="text-muted-foreground text-sm">Consulta que encontrou a faixa: {salary.query.matchedQuery}.</p>
+      ) : null}
+      {salary.similarRoleNote ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          {salary.similarRoleNote}
+        </p>
+      ) : null}
+      {salary.tried && salary.tried.length > 0 ? (
+        <div>
+          <p className="text-sm font-medium">O que foi consultado</p>
+          <ul className="text-muted-foreground mt-1 list-disc pl-4 text-sm">
+            {salary.tried.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <p className="text-muted-foreground text-xs">{salary.disclaimer}</p>
-      <div className="border-t pt-3 text-sm">
-        Fonte:{" "}
-        {salary.sources.map((s) => (
-          <span key={s.url}>
-            <a href={s.url} target="_blank" rel="noreferrer noopener" className="font-medium underline underline-offset-2">
-              {s.name}
-            </a>
-            {s.note ? <span className="text-muted-foreground"> ({s.note})</span> : null}
-          </span>
-        ))}
-        <p className="text-muted-foreground mt-1 text-xs">Jobs by Adzuna. Estimativas salariais: Adzuna Jobsworth.</p>
-      </div>
+      <SalarySources salary={salary} />
     </div>
   );
 }
@@ -295,7 +345,7 @@ export function ResultsStep({ outputs, results, steps, isMock, regenerating, onR
           <Card>
             <CardHeader>
               <CardTitle>Faixa salarial estimada</CardTitle>
-              <CardDescription>Baseada em anúncios de vagas publicados na Adzuna.</CardDescription>
+              <CardDescription>Adzuna e, quando o provedor permite, busca pública na web. Sem número, a faixa fica indisponível.</CardDescription>
               <CardAction>
                 <RegenerateButton id="salary" regenerating={regenerating} onClick={() => onRegenerate("salary")} />
               </CardAction>
