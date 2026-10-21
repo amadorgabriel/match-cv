@@ -17,14 +17,11 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Results } from "@/lib/client/api";
 import type { Artifact, Salary, ValidationReport } from "@/lib/schemas/outputs";
-import { OUTPUT_IDS, type OutputId, type OutputSelection } from "@/lib/schemas/requests";
-
 import { CopyButton } from "./copy-button";
 import { CvPdfPreview } from "./cv-pdf-preview";
 import type { StepId, StepState } from "./types";
 
 interface Props {
-  outputs: OutputSelection;
   results: Results;
   steps: StepState[];
   isMock: boolean;
@@ -56,6 +53,32 @@ function ValidationNotice({ report }: { report?: ValidationReport }) {
           ))}
         </ul>
       </div>
+    </div>
+  );
+}
+
+function NotGenerated({
+  id,
+  steps,
+  regenerating,
+  onGenerate,
+}: {
+  id: Artifact | "salary";
+  steps: StepState[];
+  regenerating: StepId | null;
+  onGenerate: () => void;
+}) {
+  const running = regenerating === id;
+  const detail = steps.find((step) => step.id === id)?.detail;
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <p className="text-sm">Este conteúdo não foi gerado.</p>
+      <Button onClick={onGenerate} disabled={regenerating !== null}>
+        {running ? <LoaderCircleIcon className="animate-spin" /> : null}
+        Gerar
+      </Button>
+      {running && detail ? <p className="text-muted-foreground text-sm">{detail}</p> : null}
+      <StepError steps={steps} id={id} />
     </div>
   );
 }
@@ -171,10 +194,11 @@ function SalaryCard({ salary }: { salary: Salary }) {
   );
 }
 
-export function ResultsStep({ outputs, results, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
+export function ResultsStep({ results, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
   const cv = results.cv?.data;
-  const visibleTabs = OUTPUT_IDS.filter((id) => outputs[id]);
-  const defaultTab: OutputId | undefined = visibleTabs[0];
+  const missing = (id: Artifact | "salary") => (
+    <NotGenerated id={id} steps={steps} regenerating={regenerating} onGenerate={() => onRegenerate(id)} />
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -201,29 +225,30 @@ export function ResultsStep({ outputs, results, steps, isMock, regenerating, onR
         </div>
       )}
 
-      {defaultTab ? (
-      <Tabs defaultValue={defaultTab}>
+      <Tabs defaultValue="cv">
         <TabsList className="flex h-auto w-full flex-wrap">
-          {outputs.cv ? <TabsTrigger value="cv"><FileTextIcon />CV ATS</TabsTrigger> : null}
-          {outputs.email ? <TabsTrigger value="email"><MailIcon />E-mail</TabsTrigger> : null}
-          {outputs["cover-letter"] ? <TabsTrigger value="cover-letter"><BriefcaseIcon />Cover letter</TabsTrigger> : null}
-          {outputs.interview ? <TabsTrigger value="interview"><MessagesSquareIcon />Entrevista</TabsTrigger> : null}
-          {outputs.salary ? <TabsTrigger value="salary"><WalletIcon />Faixa salarial</TabsTrigger> : null}
+          <TabsTrigger value="cv"><FileTextIcon />CV ATS</TabsTrigger>
+          <TabsTrigger value="email"><MailIcon />E-mail</TabsTrigger>
+          <TabsTrigger value="cover-letter"><BriefcaseIcon />Cover letter</TabsTrigger>
+          <TabsTrigger value="interview"><MessagesSquareIcon />Entrevista</TabsTrigger>
+          <TabsTrigger value="salary"><WalletIcon />Faixa salarial</TabsTrigger>
         </TabsList>
 
-        {outputs.cv ? <TabsContent value="cv">
+        <TabsContent value="cv">
           <Card>
             <CardHeader>
               <CardTitle>CV compatível com ATS</CardTitle>
               <CardDescription>Coluna única, fonte padrão e texto selecionável.</CardDescription>
-              <CardAction>
-                <RegenerateButton id="cv" regenerating={regenerating} onClick={() => onRegenerate("cv")} />
-              </CardAction>
+              {cv ? (
+                <CardAction>
+                  <RegenerateButton id="cv" regenerating={regenerating} onClick={() => onRegenerate("cv")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <StepError steps={steps} id="cv" />
-              {cv && (
+              {cv ? (
                 <>
+                  <StepError steps={steps} id="cv" />
                   <div className="rounded-lg border p-4 text-sm">
                     <p className="text-base font-semibold">{cv.fullName}</p>
                     <p className="text-muted-foreground">{cv.headline}</p>
@@ -239,103 +264,132 @@ export function ResultsStep({ outputs, results, steps, isMock, regenerating, onR
                   <ValidationNotice report={results.cv?.validation} />
                   <CvPdfPreview cv={cv} />
                 </>
+              ) : (
+                missing("cv")
               )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
 
-        {outputs.email ? <TabsContent value="email">
+        <TabsContent value="email">
           <Card>
             <CardHeader>
               <CardTitle>E-mail para a empresa</CardTitle>
-              <CardDescription>{results.email ? `Assunto: ${results.email.data.subject}` : ""}</CardDescription>
-              <CardAction className="flex gap-1">
-                {results.email && (
+              <CardDescription>{results.email ? `Assunto: ${results.email.data.subject}` : "Mensagem curta para enviar com o currículo."}</CardDescription>
+              {results.email ? (
+                <CardAction className="flex gap-1">
                   <CopyButton text={`Assunto: ${results.email.data.subject}\n\n${results.email.data.body}`} />
-                )}
-                <RegenerateButton id="email" regenerating={regenerating} onClick={() => onRegenerate("email")} />
-              </CardAction>
+                  <RegenerateButton id="email" regenerating={regenerating} onClick={() => onRegenerate("email")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <StepError steps={steps} id="email" />
-              {results.email && <Paragraphs text={results.email.data.body} />}
-              <ValidationNotice report={results.email?.validation} />
+              {results.email ? (
+                <>
+                  <StepError steps={steps} id="email" />
+                  <Paragraphs text={results.email.data.body} />
+                  <ValidationNotice report={results.email.validation} />
+                </>
+              ) : (
+                missing("email")
+              )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
 
-        {outputs["cover-letter"] ? <TabsContent value="cover-letter">
+        <TabsContent value="cover-letter">
           <Card>
             <CardHeader>
               <CardTitle>Cover letter</CardTitle>
               <CardDescription>Até cerca de 350 palavras, em parágrafos.</CardDescription>
-              <CardAction className="flex gap-1">
-                {results["cover-letter"] && <CopyButton text={results["cover-letter"].data.body} />}
-                <RegenerateButton id="cover-letter" regenerating={regenerating} onClick={() => onRegenerate("cover-letter")} />
-              </CardAction>
+              {results["cover-letter"] ? (
+                <CardAction className="flex gap-1">
+                  <CopyButton text={results["cover-letter"].data.body} />
+                  <RegenerateButton id="cover-letter" regenerating={regenerating} onClick={() => onRegenerate("cover-letter")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <StepError steps={steps} id="cover-letter" />
-              {results["cover-letter"] && <Paragraphs text={results["cover-letter"].data.body} />}
-              <ValidationNotice report={results["cover-letter"]?.validation} />
+              {results["cover-letter"] ? (
+                <>
+                  <StepError steps={steps} id="cover-letter" />
+                  <Paragraphs text={results["cover-letter"].data.body} />
+                  <ValidationNotice report={results["cover-letter"].validation} />
+                </>
+              ) : (
+                missing("cover-letter")
+              )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
 
-        {outputs.interview ? <TabsContent value="interview">
+        <TabsContent value="interview">
           <Card>
             <CardHeader>
               <CardTitle>Roteiro de entrevista</CardTitle>
               <CardDescription>Abra cada seção para ver as perguntas e as respostas sugeridas.</CardDescription>
-              <CardAction>
-                <RegenerateButton id="interview" regenerating={regenerating} onClick={() => onRegenerate("interview")} />
-              </CardAction>
+              {results.interview ? (
+                <CardAction>
+                  <RegenerateButton id="interview" regenerating={regenerating} onClick={() => onRegenerate("interview")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent>
-              <StepError steps={steps} id="interview" />
-              {results.interview && (
-                <Accordion multiple defaultValue={[results.interview.data.sections[0]?.title]}>
-                  {results.interview.data.sections.map((section) => (
-                    <AccordionItem key={section.title} value={section.title}>
-                      <AccordionTrigger>
-                        {section.title} ({section.items.length})
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <ul className="flex flex-col gap-4">
-                          {section.items.map((item, i) => (
-                            <li key={i}>
-                              <p className="font-medium">{item.question}</p>
-                              {item.suggestedAnswer && <p className="text-muted-foreground mt-1">{item.suggestedAnswer}</p>}
-                              {item.notes && <p className="mt-1 text-amber-700 dark:text-amber-300">{item.notes}</p>}
-                            </li>
-                          ))}
-                        </ul>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+              {results.interview ? (
+                <>
+                  <StepError steps={steps} id="interview" />
+                  <Accordion multiple defaultValue={[results.interview.data.sections[0]?.title]}>
+                    {results.interview.data.sections.map((section) => (
+                      <AccordionItem key={section.title} value={section.title}>
+                        <AccordionTrigger>
+                          {section.title} ({section.items.length})
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <ul className="flex flex-col gap-4">
+                            {section.items.map((item, i) => (
+                              <li key={i}>
+                                <p className="font-medium">{item.question}</p>
+                                {item.suggestedAnswer && <p className="text-muted-foreground mt-1">{item.suggestedAnswer}</p>}
+                                {item.notes && <p className="mt-1 text-amber-700 dark:text-amber-300">{item.notes}</p>}
+                              </li>
+                            ))}
+                          </ul>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </>
+              ) : (
+                missing("interview")
               )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
 
-        {outputs.salary ? <TabsContent value="salary">
+        <TabsContent value="salary">
           <Card>
             <CardHeader>
               <CardTitle>Faixa salarial estimada</CardTitle>
               <CardDescription>Adzuna e, quando o provedor permite, busca pública na web. Sem número, a faixa fica indisponível.</CardDescription>
-              <CardAction>
-                <RegenerateButton id="salary" regenerating={regenerating} onClick={() => onRegenerate("salary")} />
-              </CardAction>
+              {results.salary ? (
+                <CardAction>
+                  <RegenerateButton id="salary" regenerating={regenerating} onClick={() => onRegenerate("salary")} />
+                </CardAction>
+              ) : null}
             </CardHeader>
             <CardContent>
-              <StepError steps={steps} id="salary" />
-              {results.salary && <SalaryCard salary={results.salary} />}
+              {results.salary ? (
+                <>
+                  <StepError steps={steps} id="salary" />
+                  <SalaryCard salary={results.salary} />
+                </>
+              ) : (
+                missing("salary")
+              )}
             </CardContent>
           </Card>
-        </TabsContent> : null}
+        </TabsContent>
       </Tabs>
-      ) : null}
     </div>
   );
 }

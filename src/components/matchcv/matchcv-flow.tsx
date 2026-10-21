@@ -45,7 +45,12 @@ export function MatchCvFlow() {
   const abortRef = useRef<AbortController | null>(null);
 
   const setStep = (id: StepId, patch: Partial<StepState>) =>
-    setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    setSteps((prev) => {
+      if (!prev.some((step) => step.id === id)) {
+        return [...prev, { id, label: STEP_LABELS[id], status: "pending", ...patch }];
+      }
+      return prev.map((step) => (step.id === id ? { ...step, ...patch } : step));
+    });
 
   async function runArtifact(artifact: Artifact, payload: GeneratePayload, signal?: AbortSignal) {
     setStep(artifact, { status: "running", error: undefined, detail: undefined });
@@ -119,7 +124,9 @@ export function MatchCvFlow() {
   }
 
   async function start(v: FormValues) {
-    const stepIds = processingStepsFor(v.outputs);
+    const requested = processingStepsFor(v.outputs);
+    // O texto do CV fica em memória mesmo se o material não foi marcado, para o botão Gerar de cada aba.
+    const stepIds: StepId[] = requested.includes("parse") ? requested : ["parse", ...requested];
     setValues(v);
     setResults({});
     setSteps(toStepStates(stepIds, v.achievementsFile));
@@ -197,7 +204,6 @@ export function MatchCvFlow() {
   if (phase === "results" && values)
     return (
       <ResultsStep
-        outputs={values.outputs}
         results={results}
         steps={steps}
         isMock={Object.values(results).some((r) => r && typeof r === "object" && ("mock" in r ? r.mock : "isMock" in r && r.isMock))}
