@@ -2,6 +2,7 @@ import { cvPdfFilename } from "@/lib/pdf/cv-document";
 import { cvToPdf } from "@/lib/pdf/cv-to-pdf";
 import { CvSchema } from "@/lib/schemas/outputs";
 import { checkRateLimit, jsonError, readJson } from "@/lib/security/http";
+import { logApiError } from "@/lib/security/redact";
 
 // Runtime Node.js (padrão do Next 16; o export `runtime` não é compatível com cacheComponents).
 
@@ -26,7 +27,8 @@ export async function POST(req: Request) {
         "Cache-Control": "no-store",
       },
     });
-  } catch {
+  } catch (err) {
+    logApiError({ route: "/api/cv/pdf", error: err, statusCode: 500 });
     return jsonError(500, "pdf_failed", "Não foi possível gerar o PDF.");
   }
 }

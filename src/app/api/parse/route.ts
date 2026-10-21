@@ -2,6 +2,7 @@ import { extractText, getDocumentProxy } from "unpdf";
 
 import { LIMITS } from "@/lib/schemas/requests";
 import { checkRateLimit, jsonError, jsonOk } from "@/lib/security/http";
+import { logApiError } from "@/lib/security/redact";
 
 // Runtime Node.js (padrão do Next 16; o export `runtime` não é compatível com cacheComponents).
 
@@ -47,7 +48,8 @@ export async function POST(req: Request) {
       chars: clean.length,
       truncated: clean.length > LIMITS.maxResumeChars,
     });
-  } catch {
+  } catch (err) {
+    logApiError({ route: "/api/parse", error: err, statusCode: 422 });
     return jsonError(422, "parse_failed", "Não foi possível ler o PDF.");
   }
 }

@@ -4,6 +4,7 @@ import { lookupSalary, SalaryRateLimitError } from "@/lib/salary/search";
 import type { Salary } from "@/lib/schemas/outputs";
 import { SalaryRequestSchema } from "@/lib/schemas/requests";
 import { checkRateLimit, jsonError, jsonOk, readJson } from "@/lib/security/http";
+import { logApiError } from "@/lib/security/redact";
 
 // Runtime Node.js (padrão do Next 16; o export `runtime` não é compatível com cacheComponents).
 export const maxDuration = 60;
@@ -34,17 +35,26 @@ export async function POST(req: Request) {
   const parsed = await readJson(req, SalaryRequestSchema, 40_000);
   if (!parsed.ok) return parsed.response;
 
+  const started = Date.now();
   try {
     const salary = await lookupSalary({ ...parsed.data, realAi: isRealAiEnabled(), signal: req.signal });
     return jsonOk(salary);
   } catch (err) {
+    const statusCode = err instanceof SalaryRateLimitError ? 429 : 200;
+    logApiError({
+      route: "/api/salary",
+      error: err,
+      statusCode,
+      provider: parsed.data.provider,
+      model: parsed.data.model,
+      durationMs: Date.now() - started,
+      secrets: [parsed.data.apiKey],
+    });
     if (err instanceof SalaryRateLimitError) {
       return jsonError(429, "provider_rate_limited", providerRateLimitMessage(err.retryAfterSec), {
         "Retry-After": String(err.retryAfterSec),
       });
     }
-    // Não logar `err` inteiro: a busca na web pode carregar a chave na mensagem.
-    console.error(`[salary] falhou: ${err instanceof Error ? err.name : "erro"}`);
     return jsonOk(unavailable(parsed.data.jobTitle ?? "cargo da vaga"));
   }
 }

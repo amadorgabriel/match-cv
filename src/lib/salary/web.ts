@@ -5,6 +5,7 @@ import { generateText, isStepCount } from "ai";
 import type { ProviderId } from "@/lib/ai/catalog";
 import { readProviderHttpFailure } from "@/lib/ai/provider-error";
 import { buildWebSearchRequest, supportsNativeWebSearch } from "@/lib/ai/providers";
+import { logApiError } from "@/lib/security/redact";
 import { buildWebSalaryPrompt, WEB_SALARY_SYSTEM } from "@/prompts/salary";
 
 import type { JobAnalysis } from "./job";
@@ -57,8 +58,14 @@ export async function searchWebSalary(input: {
   } catch (error) {
     const failure = readProviderHttpFailure(error);
     if (failure?.statusCode === 429) throw new WebSearchRateLimitError(failure.retryAfterSec ?? 15);
-    // Não logar o erro inteiro: a mensagem pode carregar a chave.
-    console.error(`[salary:web] falhou: ${error instanceof Error ? error.name : "erro"}`);
+    logApiError({
+      route: "/api/salary",
+      error,
+      statusCode: failure?.statusCode,
+      provider: input.provider,
+      model: input.model,
+      secrets: [input.apiKey],
+    });
     return null;
   }
 }
