@@ -112,10 +112,10 @@ export function FormStep({ initial, onSubmit }: Props) {
   function validate(): Record<string, string> {
     const e: Record<string, string> = {};
     if (!file) e.file = "Envie o currículo em PDF.";
-    else if (!isPdf(file)) e.file = "O arquivo precisa ser PDF.";
+    else if (!isPdf(file)) e.file = "Por enquanto só aceitamos CV em PDF.";
     else if (file.size > LIMITS.maxFileBytes) e.file = "O PDF precisa ter até 4 MB.";
     if (achievementsFile) {
-      if (!isPdf(achievementsFile)) e.achievementsFile = "O documento de conquistas precisa ser PDF.";
+      if (!isPdf(achievementsFile)) e.achievementsFile = "Por enquanto só aceitamos PDF.";
       else if (achievementsFile.size > LIMITS.maxFileBytes) e.achievementsFile = "O PDF de conquistas precisa ter até 4 MB.";
     }
     if (jobDescription.trim().length < 50) e.jobDescription = "Cole a descrição completa da vaga (mínimo de 50 caracteres).";

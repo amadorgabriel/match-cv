@@ -52,7 +52,6 @@ export interface ParseResult {
   pages: number;
   chars: number;
   truncated: boolean;
-  empty: boolean;
 }
 
 export async function parseResume(file: File, signal?: AbortSignal): Promise<ParseResult> {

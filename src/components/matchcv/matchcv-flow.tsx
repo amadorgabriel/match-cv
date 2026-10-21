@@ -134,16 +134,8 @@ export function MatchCvFlow() {
     if (stepIds.includes("parse")) {
       setStep("parse", { status: "running" });
       try {
-        const cvPromise = parseResume(v.file, signal).then((parsed) => {
-          if (parsed.empty) throw new Error("Não encontramos texto no PDF. Ele pode ser uma imagem escaneada.");
-          return parsed;
-        });
-        const achievementsPromise = v.achievementsFile
-          ? parseResume(v.achievementsFile, signal).then((parsed) => {
-              if (parsed.empty) throw new Error("Não encontramos texto no PDF de conquistas. Ele pode ser uma imagem escaneada.");
-              return parsed;
-            })
-          : Promise.resolve(null);
+        const cvPromise = parseResume(v.file, signal);
+        const achievementsPromise = v.achievementsFile ? parseResume(v.achievementsFile, signal) : Promise.resolve(null);
         const [parsed, achievementsPdf] = await Promise.all([cvPromise, achievementsPromise]);
         resumeText = parsed.text;
         achievementsDocument = achievementsPdf?.text ?? "";
