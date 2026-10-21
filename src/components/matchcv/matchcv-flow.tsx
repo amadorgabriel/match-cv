@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 
-import { fetchSalary, generate, type GeneratePayload, parseResume, type Results } from "@/lib/client/api";
+import { concurrencyForProvider, mapWithConcurrency, RETRY_ATTEMPTS, retryAsync, retryDelayMs } from "@/lib/async/pool";
+import { ApiError, fetchSalary, generate, isRetryableClientError, parseResume, type GeneratePayload, type Results } from "@/lib/client/api";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
 import { DEFAULT_OUTPUT_SELECTION, processingStepsFor } from "@/lib/schemas/requests";
 
@@ -46,14 +47,26 @@ export function MatchCvFlow() {
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
 
   async function runArtifact(artifact: Artifact, payload: GeneratePayload, signal?: AbortSignal) {
-    setStep(artifact, { status: "running", error: undefined });
+    setStep(artifact, { status: "running", error: undefined, detail: undefined });
     try {
-      const r = await generate(artifact, payload, signal);
+      const r = await retryAsync(() => generate(artifact, payload, signal), {
+        attempts: RETRY_ATTEMPTS,
+        signal,
+        shouldRetry: (error) => !signal?.aborted && isRetryableClientError(error),
+        delayMs: (error, attempt) => retryDelayMs(attempt, error instanceof ApiError ? error.retryAfterSec : undefined),
+        onRetry: ({ nextAttempt, delayMs, error }) => {
+          const seconds = Math.max(1, Math.ceil(delayMs / 1000));
+          const base = error instanceof ApiError && error.status === 429
+            ? error.message
+            : `Tentando de novo em ${seconds} s`;
+          setStep(artifact, { detail: `${base} (tentativa ${nextAttempt} de ${RETRY_ATTEMPTS})` });
+        },
+      });
       setResults((prev) => ({ ...prev, [artifact]: r }));
-      setStep(artifact, { status: "done" });
+      setStep(artifact, { status: "done", detail: undefined });
     } catch (err) {
       if (signal?.aborted) return;
-      setStep(artifact, { status: "error", error: errorMessage(err) });
+      setStep(artifact, { status: "error", error: errorMessage(err), detail: undefined });
     }
   }
 
@@ -119,10 +132,11 @@ export function MatchCvFlow() {
     };
     payloadRef.current = payload;
 
-    await Promise.all([
-      ...stepIds.filter(isArtifact).map((artifact) => runArtifact(artifact, payload, signal)),
-      ...(stepIds.includes("salary") ? [runSalary(v.jobDescription, signal)] : []),
-    ]);
+    const tasks: Array<() => Promise<void>> = [
+      ...stepIds.filter(isArtifact).map((artifact) => () => runArtifact(artifact, payload, signal)),
+      ...(stepIds.includes("salary") ? [() => runSalary(v.jobDescription, signal)] : []),
+    ];
+    await mapWithConcurrency(tasks, concurrencyForProvider(v.provider), (task) => task());
     if (!signal.aborted) setPhase("results");
   }
 

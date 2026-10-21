@@ -1,4 +1,5 @@
 import type { ProviderId } from "@/lib/ai/catalog";
+import { parseRetryAfterValue } from "@/lib/async/pool";
 import type { Artifact, ArtifactOutput, Cv, GenerateResponse, Salary } from "@/lib/schemas/outputs";
 
 /**
@@ -11,9 +12,15 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     public code?: string,
+    public retryAfterSec?: number,
   ) {
     super(message);
   }
+}
+
+/** 429 e 5xx podem ser tentados de novo. `no_data` não: não é instabilidade. */
+export function isRetryableClientError(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 429 || (error.status >= 500 && error.code !== "no_data"));
 }
 
 async function handle<T>(res: Response): Promise<T> {
@@ -27,7 +34,7 @@ async function handle<T>(res: Response): Promise<T> {
   } catch {
     // corpo não JSON
   }
-  throw new ApiError(message, res.status, code);
+  throw new ApiError(message, res.status, code, parseRetryAfterValue(res.headers.get("retry-after")));
 }
 
 function postJson(url: string, body: unknown, signal?: AbortSignal) {

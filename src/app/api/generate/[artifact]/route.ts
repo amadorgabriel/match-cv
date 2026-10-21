@@ -1,5 +1,6 @@
 import { isRealAiEnabled } from "@/lib/ai/flags";
 import { generateArtifact } from "@/lib/ai/generate";
+import { providerRateLimitMessage, readProviderHttpFailure } from "@/lib/ai/provider-error";
 import { ProviderConfigError } from "@/lib/ai/providers";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
 import { GENERATE_REQUEST_MAX_BYTES, GenerateRequestSchema } from "@/lib/schemas/requests";
@@ -37,6 +38,13 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
     return jsonOk(result);
   } catch (err) {
     if (err instanceof ProviderConfigError) return jsonError(400, "invalid_provider", "Provedor ou modelo inválido.");
+    const providerFailure = readProviderHttpFailure(err);
+    if (providerFailure?.statusCode === 429) {
+      const seconds = providerFailure.retryAfterSec ?? 15;
+      return jsonError(429, "provider_rate_limited", providerRateLimitMessage(seconds), {
+        "Retry-After": String(seconds),
+      });
+    }
     // Mensagem genérica. Não logar `err` inteiro: pode conter headers com a chave.
     console.error(`[generate:${artifact}] falhou: ${err instanceof Error ? err.name : "erro"}`);
     return jsonError(502, "generation_failed", "A geração falhou. Confira a chave e o modelo e tente de novo.");
