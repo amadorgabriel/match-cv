@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { fetchSalary, generate, type GeneratePayload, parseResume, type Results } from "@/lib/client/api";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
+import { DEFAULT_OUTPUT_SELECTION, processingStepsFor } from "@/lib/schemas/requests";
 
 import { FormStep } from "./form-step";
 import { ProcessingStep } from "./processing-step";
@@ -12,10 +13,16 @@ import { STEP_LABELS, type FormValues, type StepId, type StepState } from "./typ
 
 type Phase = "form" | "processing" | "results";
 
-const ALL_STEPS: StepId[] = ["parse", ...ARTIFACTS, "salary"];
+function isArtifact(id: StepId): id is Artifact {
+  return (ARTIFACTS as readonly string[]).includes(id);
+}
 
-function initialSteps(): StepState[] {
-  return ALL_STEPS.map((id) => ({ id, label: STEP_LABELS[id], status: "pending" }));
+function toStepStates(ids: StepId[], achievementsFile: File | null): StepState[] {
+  return ids.map((id) => ({
+    id,
+    label: id === "parse" && achievementsFile ? "Ler o currículo e as conquistas" : STEP_LABELS[id],
+    status: "pending",
+  }));
 }
 
 function errorMessage(err: unknown): string {
@@ -29,7 +36,7 @@ function errorMessage(err: unknown): string {
 export function MatchCvFlow() {
   const [phase, setPhase] = useState<Phase>("form");
   const [values, setValues] = useState<FormValues | null>(null);
-  const [steps, setSteps] = useState<StepState[]>(initialSteps);
+  const [steps, setSteps] = useState<StepState[]>(() => toStepStates(processingStepsFor(DEFAULT_OUTPUT_SELECTION), null));
   const [results, setResults] = useState<Results>({});
   const [regenerating, setRegenerating] = useState<StepId | null>(null);
   const payloadRef = useRef<GeneratePayload | null>(null);
@@ -63,28 +70,42 @@ export function MatchCvFlow() {
   }
 
   async function start(v: FormValues) {
+    const stepIds = processingStepsFor(v.outputs);
     setValues(v);
     setResults({});
-    setSteps(initialSteps());
+    setSteps(toStepStates(stepIds, v.achievementsFile));
     setPhase("processing");
 
     const controller = new AbortController();
     abortRef.current = controller;
     const { signal } = controller;
 
-    setStep("parse", { status: "running" });
-    let resumeText: string;
-    try {
-      const parsed = await parseResume(v.file, signal);
-      if (parsed.empty) throw new Error("Não encontramos texto no PDF. Ele pode ser uma imagem escaneada.");
-      resumeText = parsed.text;
-      setStep("parse", { status: "done" });
-    } catch (err) {
-      if (signal.aborted) return;
-      setStep("parse", { status: "error", error: errorMessage(err) });
-      for (const id of ALL_STEPS.slice(1)) setStep(id, { status: "error", error: "Pulado" });
-      setTimeout(() => setPhase("form"), 2500);
-      return;
+    let resumeText = "";
+    let achievementsDocument = "";
+    if (stepIds.includes("parse")) {
+      setStep("parse", { status: "running" });
+      try {
+        const cvPromise = parseResume(v.file, signal).then((parsed) => {
+          if (parsed.empty) throw new Error("Não encontramos texto no PDF. Ele pode ser uma imagem escaneada.");
+          return parsed;
+        });
+        const achievementsPromise = v.achievementsFile
+          ? parseResume(v.achievementsFile, signal).then((parsed) => {
+              if (parsed.empty) throw new Error("Não encontramos texto no PDF de conquistas. Ele pode ser uma imagem escaneada.");
+              return parsed;
+            })
+          : Promise.resolve(null);
+        const [parsed, achievementsPdf] = await Promise.all([cvPromise, achievementsPromise]);
+        resumeText = parsed.text;
+        achievementsDocument = achievementsPdf?.text ?? "";
+        setStep("parse", { status: "done" });
+      } catch (err) {
+        if (signal.aborted) return;
+        setStep("parse", { status: "error", error: errorMessage(err) });
+        for (const id of stepIds.slice(1)) setStep(id, { status: "error", error: "Pulado" });
+        setTimeout(() => setPhase("form"), 2500);
+        return;
+      }
     }
 
     const payload: GeneratePayload = {
@@ -94,12 +115,13 @@ export function MatchCvFlow() {
       resumeText,
       jobDescription: v.jobDescription,
       achievements: v.achievements,
+      achievementsDocument,
     };
     payloadRef.current = payload;
 
     await Promise.all([
-      ...ARTIFACTS.map((a) => runArtifact(a, payload, signal)),
-      runSalary(v.jobDescription, signal),
+      ...stepIds.filter(isArtifact).map((artifact) => runArtifact(artifact, payload, signal)),
+      ...(stepIds.includes("salary") ? [runSalary(v.jobDescription, signal)] : []),
     ]);
     if (!signal.aborted) setPhase("results");
   }
@@ -124,15 +146,16 @@ export function MatchCvFlow() {
   function reset() {
     payloadRef.current = null;
     setResults({});
-    setSteps(initialSteps());
-    setValues((prev) => (prev ? { ...prev, jobDescription: "", achievements: "" } : prev));
+    setValues((prev) => (prev ? { ...prev, jobDescription: "", achievements: "", achievementsFile: null } : prev));
+    setSteps(toStepStates(processingStepsFor(DEFAULT_OUTPUT_SELECTION), null));
     setPhase("form");
   }
 
   if (phase === "processing") return <ProcessingStep steps={steps} onCancel={cancel} />;
-  if (phase === "results")
+  if (phase === "results" && values)
     return (
       <ResultsStep
+        outputs={values.outputs}
         results={results}
         steps={steps}
         isMock={Object.values(results).some((r) => r && typeof r === "object" && ("mock" in r ? r.mock : "isMock" in r && r.isMock))}

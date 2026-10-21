@@ -67,6 +67,8 @@ export interface GeneratePayload {
   resumeText: string;
   jobDescription: string;
   achievements: string;
+  /** Texto do PDF opcional de conquistas. String vazia quando não houver arquivo. */
+  achievementsDocument: string;
 }
 
 export async function generate<A extends Artifact>(

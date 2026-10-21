@@ -1,6 +1,7 @@
+import { ACHIEVEMENTS_DOCUMENT_RULE, withAchievementsDocument } from "./achievements-document";
 import type { PromptInput } from "./types";
 
-export const INTERVIEW_PROMPT_VERSION = "interview@1.0.0";
+export const INTERVIEW_PROMPT_VERSION = "interview@1.1.0";
 
 export const INTERVIEW_SYSTEM = `
 Você prepara candidatos para entrevistas de vagas de tecnologia.
@@ -12,18 +13,22 @@ Monte um roteiro de preparação no schema fornecido, com estas seções, nesta 
 
 Regras:
 - Nunca invente experiências. Se o currículo não cobre um requisito, diga isso em "Pontos de atenção".
+- ${ACHIEVEMENTS_DOCUMENT_RULE}
 - Escreva no idioma da vaga, em tom direto. Sem travessão e sem til antes de números.
 `.trim();
 
-export function buildInterviewPrompt({ resumeText, jobDescription, achievements }: PromptInput): string {
-  return [
-    "CURRÍCULO:",
-    resumeText,
-    "",
-    "DESCRIÇÃO DA VAGA:",
-    jobDescription,
-    "",
-    "CONQUISTAS E NÚMEROS INFORMADOS PELO CANDIDATO:",
-    achievements?.trim() ? achievements : "(nenhuma informada)",
-  ].join("\n");
+export function buildInterviewPrompt({ resumeText, jobDescription, achievements, achievementsDocument }: PromptInput): string {
+  return withAchievementsDocument(
+    [
+      "CURRÍCULO:",
+      resumeText,
+      "",
+      "DESCRIÇÃO DA VAGA:",
+      jobDescription,
+      "",
+      "CONQUISTAS E NÚMEROS INFORMADOS PELO CANDIDATO:",
+      achievements?.trim() ? achievements : "(nenhuma informada)",
+    ].join("\n"),
+    achievementsDocument,
+  );
 }

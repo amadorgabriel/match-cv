@@ -2,7 +2,7 @@ import { isRealAiEnabled } from "@/lib/ai/flags";
 import { generateArtifact } from "@/lib/ai/generate";
 import { ProviderConfigError } from "@/lib/ai/providers";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
-import { GenerateRequestSchema } from "@/lib/schemas/requests";
+import { GENERATE_REQUEST_MAX_BYTES, GenerateRequestSchema } from "@/lib/schemas/requests";
 import { checkRateLimit, jsonError, jsonOk, readJson } from "@/lib/security/http";
 
 // Runtime Node.js (padrão do Next 16; o export `runtime` não é compatível com cacheComponents).
@@ -14,7 +14,7 @@ function isArtifact(value: string): value is Artifact {
 
 /**
  * POST /api/generate/{cv|email|cover-letter|interview}
- * Body: { provider, model, apiKey, resumeText, jobDescription, achievements? }
+ * Body: { provider, model, apiKey, resumeText, jobDescription, achievements?, achievementsDocument? }
  *
  * A chave só existe dentro deste handler: é usada para criar o provider
  * e descartada. Não é logada, persistida nem devolvida.
@@ -26,7 +26,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
   const limited = checkRateLimit(req, "generate", 30);
   if (limited) return limited;
 
-  const parsed = await readJson(req, GenerateRequestSchema, 120_000);
+  const parsed = await readJson(req, GenerateRequestSchema, GENERATE_REQUEST_MAX_BYTES);
   if (!parsed.ok) return parsed.response;
 
   try {
