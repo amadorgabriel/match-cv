@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (err) {
-    logApiError({ route: "/api/cv/pdf", error: err, statusCode: 500 });
+    await logApiError({ route: "/api/cv/pdf", error: err, statusCode: 500 });
     return jsonError(500, "pdf_failed", "Não foi possível gerar o PDF.");
   }
 }

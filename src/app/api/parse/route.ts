@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       truncated: clean.length > LIMITS.maxResumeChars,
     });
   } catch (err) {
-    logApiError({ route: "/api/parse", error: err, statusCode: 422 });
+    await logApiError({ route: "/api/parse", error: err, statusCode: 422 });
     return jsonError(422, "parse_failed", "Não foi possível ler o PDF.");
   }
 }

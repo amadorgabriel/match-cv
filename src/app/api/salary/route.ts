@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     return jsonOk(salary);
   } catch (err) {
     const statusCode = err instanceof SalaryRateLimitError ? 429 : 200;
-    logApiError({
+    await logApiError({
       route: "/api/salary",
       error: err,
       statusCode,

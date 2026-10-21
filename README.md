@@ -26,7 +26,7 @@ Por padrão só o **CV** vem marcado. E-mail, cover letter, entrevista e faixa s
 | Leitura do CV | `unpdf` (só PDF com texto) |
 | PDF | `@react-pdf/renderer` no navegador, com prévia em blob |
 | Salário | Adzuna (`/jobs/br/histogram`, cache de 1 dia) e busca nativa do provedor |
-| Telemetria | `@vercel/otel` e, se configurado, `@langfuse/otel` |
+| Telemetria | `@vercel/otel`, `@langfuse/otel` opcional e `@sentry/nextjs` opcional |
 | Testes | Vitest |
 | Hospedagem | Vercel |
 
@@ -38,8 +38,11 @@ MatchCV/
 ├─ favicon.ico                # pedido na raiz; o Next não serve este arquivo sozinho
 ├─ next.config.ts             # headers de segurança e proxyTimeout
 ├─ src/
-│  ├─ instrumentation.ts      # OpenTelemetry no runtime Node
-│  ├─ proxy.ts                # CSP com nonce
+│  ├─ instrumentation.ts      # OpenTelemetry no Node e init do Sentry
+│  ├─ instrumentation-client.ts
+│  ├─ sentry.server.config.ts
+│  ├─ sentry.edge.config.ts
+│  ├─ proxy.ts                # CSP com nonce; /monitoring fica de fora
 │  ├─ app/
 │  │  ├─ favicon.ico          # ícone que o Next serve
 │  │  ├─ icon.png
@@ -131,7 +134,50 @@ A sessão vai no header `x-matchcv-session`. A tentativa vai em `x-matchcv-attem
 
 O Langfuse só é criado se `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` e `LANGFUSE_BASEURL` existirem. Sem as três, o exporter não sobe. Quando sobe, mascara padrões de chave e só exporta spans com o atributo `matchcv.artifact`.
 
-As chamadas de saída para Adzuna, OpenAI, Anthropic, Google, Together e OpenRouter ficam de fora do tracing de `fetch`, para a URL com `app_key` e os headers de autorização não virarem span.
+As chamadas de saída para Adzuna, OpenAI, Anthropic, Google, Together, OpenRouter e Sentry ficam de fora do tracing de `fetch`, para a URL com `app_key` e os headers de autorização não virarem span.
+
+## Sentry
+
+O Sentry é opcional. Sem `SENTRY_DSN` e `NEXT_PUBLIC_SENTRY_DSN`, o SDK não inicializa e o app funciona como antes. O build não precisa de `SENTRY_AUTH_TOKEN`: o upload de source maps só acontece quando o token existe.
+
+O `@vercel/otel` continua dono do tracing no Node. O Sentry não registra um segundo provider (`enableOpenTelemetrySetup: false`) e não define `tracesSampleRate` nesse runtime, para não duplicar span. Com DSN, os spans que o OpenTelemetry já cria seguem também para o Sentry por OTLP, na taxa `SENTRY_TRACES_SAMPLE_RATE` (padrão `0.1`). No browser e no edge a mesma taxa vai em `tracesSampleRate`. Não há Session Replay.
+
+O browser envia eventos para `/monitoring` no próprio app (`tunnelRoute`). A CSP permanece `connect-src 'self'`. O `src/proxy.ts` não intercepta essa rota.
+
+`beforeSend`, `beforeSendTransaction` e `beforeSendSpan` removem `Authorization`, `x-api-key`, `x-goog-api-key`, `apiKey`, `app_key`, cookies, o corpo do request e o texto do CV e da vaga, com o mesmo `redactSecrets` dos logs. O SDK 11 não tem mais `sendDefaultPii`; `dataCollection` deixa IP, cookies, corpos e texto de IA desligados.
+
+Erros das rotas `/api/generate`, `/api/brief`, `/api/salary`, `/api/parse`, `/api/cv/pdf` e `/api/key/validate` passam por `logApiError`, que envia ao Sentry as tags `route`, `artifact`, `provider` e `model`. A chave não entra. `src/app/global-error.tsx` captura erro de render do App Router.
+
+### Projeto no sentry.io
+
+O projeto já existe na org `amador-gabriel-rc`, com o nome `match-cv` (SaaS, sentry.io). `SENTRY_DSN` e `NEXT_PUBLIC_SENTRY_DSN` já estão na Vercel. Para o `npm run dev` local, copie o DSN do projeto para o `.env.local`:
+
+```
+SENTRY_DSN=https://…@….ingest.sentry.io/…
+NEXT_PUBLIC_SENTRY_DSN=https://…@….ingest.sentry.io/…
+SENTRY_ORG=amador-gabriel-rc
+SENTRY_PROJECT=match-cv
+```
+
+`withSentryConfig` usa `SENTRY_ORG` e `SENTRY_PROJECT` quando existem. Sem elas, o fallback é `amador-gabriel-rc` e `match-cv`. O DSN e o `SENTRY_AUTH_TOKEN` não ficam no código.
+
+1. Opcional: em **Settings → Auth Tokens**, crie um token com `project:releases` e `org:read` e defina `SENTRY_AUTH_TOKEN` para o build enviar source maps. Sem o token, `npm run build` termina do mesmo jeito e só não publica os mapas.
+2. Opcional: `SENTRY_TRACES_SAMPLE_RATE=0.1` e `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.1`.
+3. Reinicie o `npm run dev`.
+
+### Disparar um erro de teste
+
+Com o DSN preenchido, o erro precisa nascer no app. O console do navegador não conta.
+
+No cliente, um botão temporário em qualquer componente com `"use client"`:
+
+```tsx
+<button type="button" onClick={() => { throw new Error("Sentry Test Error"); }}>
+  Testar Sentry
+</button>
+```
+
+No servidor, um `throw new Error("Sentry server test")` temporário dentro de um route handler. Erros já capturados pelas rotas de API aparecem com as tags de rota, artefato, provedor e modelo. Tire o código de teste antes de commitar. O evento deve chegar em **Issues** sem a chave, sem cookie e sem o texto do CV.
 
 ## Como configurar a Adzuna
 
@@ -150,7 +196,7 @@ As credenciais da Adzuna ficam no servidor. A tela mostra "Jobs by Adzuna" e o s
 ## Deploy na Vercel
 
 1. Importe o repositório em https://vercel.com/new.
-2. Cadastre `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` e, para IA real, `MATCHCV_ENABLE_AI=true`. As variáveis do Langfuse são opcionais.
+2. Cadastre `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` e, para IA real, `MATCHCV_ENABLE_AI=true`. Langfuse é opcional. O Sentry liga com `SENTRY_DSN` e `NEXT_PUBLIC_SENTRY_DSN` (já presentes na Vercel). `SENTRY_ORG` e `SENTRY_PROJECT` são opcionais: sem elas o build usa `amador-gabriel-rc` e `match-cv`. `SENTRY_AUTH_TOKEN` só entra se o build for enviar source maps.
 3. Para o rate limit durável, crie o Redis Upstash no Marketplace e conecte a este projeto. O passo a passo está na seção seguinte. Sem essas variáveis o limite continua em memória.
 4. Use Node.js 24.
 
@@ -158,7 +204,7 @@ O plano Hobby é gratuito e vale para uso pessoal e não comercial.
 
 ## Segurança
 
-- CSP com nonce em `src/proxy.ts` (`connect-src 'self'`, `frame-src 'self' blob:`, `object-src blob:`). `style-src` ainda tem `unsafe-inline`. Os outros headers de segurança ficam em `next.config.ts`.
+- CSP com nonce em `src/proxy.ts` (`connect-src 'self'`, `frame-src 'self' blob:`, `object-src blob:`). `style-src` ainda tem `unsafe-inline`. O túnel `/monitoring` do Sentry fica fora do proxy. Os outros headers de segurança ficam em `next.config.ts`.
 - A saída do modelo é texto puro, sem `dangerouslySetInnerHTML`.
 - Rate limit por IP em todas as rotas de API. Com Upstash Redis a janela deslizante vale entre instâncias. Sem as variáveis, ou se o Redis falha, o limite em memória desta instância assume.
 - `logApiError` e `logApiWarning` mascaram `sk-`, `sk-ant-`, `sk-or-`, `AIza`, `Bearer`, `app_key` e os segredos passados na chamada. A resposta de erro não devolve a chave nem o corpo.
