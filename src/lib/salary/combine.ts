@@ -115,6 +115,7 @@ export function combineSalary(
     query: {
       ...baseQuery,
       matchedQuery: chosen.map((item) => item.item.matchedQuery).filter(Boolean).join("; ") || undefined,
+      comparedRole: !exact && roleFound ? roleFound : undefined,
     },
     similarRoleNote: note,
     tried,

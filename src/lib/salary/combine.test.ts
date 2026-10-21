@@ -51,6 +51,7 @@ describe("combineSalary", () => {
     expect(partial.similarRoleNote).toBe(
       "Não encontramos a faixa de pleno para esse cargo, mas temos a de desenvolvedor júnior full stack, apesar de não ser a mesma vaga.",
     );
+    expect(partial.query.comparedRole).toBe("desenvolvedor júnior full stack");
     const empty = combineSalary(job, [], ["Adzuna título: sem dados", "Busca na web sem faixa numérica."]);
     expect(empty.available).toBe(false);
     expect(empty.min).toBeUndefined();

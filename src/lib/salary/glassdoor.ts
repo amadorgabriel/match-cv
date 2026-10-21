@@ -2,13 +2,14 @@
  * Busca de salários do Glassdoor Brasil.
  * O caminho é o que o próprio site publica, por exemplo
  * /Salários/engenheiro-de-software-salário-SRCH_KO0,22.htm
- * e /Salários/itaú-unibanco-salário-SRCH_KO0,13.htm.
+ * e /Salários/desenvolvedor-front-end-itaú-unibanco-salário-SRCH_KO0,37.htm.
  * KO0,N é o tamanho do termo (hífen no lugar do espaço conta igual).
- * Só monta a URL. Não busca a página.
+ * A página por empresa (Salários-E<id>) precisa do id interno e não é
+ * montada aqui. Só monta a URL de busca. Não busca a página.
  */
 
 export function glassdoorSalarySearchUrl(input: { company?: string; jobTitle?: string }): string | undefined {
-  const keyword = glassdoorKeyword(input.company, input.jobTitle);
+  const keyword = glassdoorKeyword(input.jobTitle, input.company);
   if (!keyword) return undefined;
   const slug = slugify(keyword);
   if (!slug) return undefined;
@@ -16,12 +17,17 @@ export function glassdoorSalarySearchUrl(input: { company?: string; jobTitle?: s
 }
 
 export function glassdoorSalaryLinkLabel(input: { company?: string; jobTitle?: string }): string {
-  const who = clean(input.company) || clean(input.jobTitle);
-  return who ? `Ver salários de ${who} no Glassdoor` : "Ver salários no Glassdoor";
+  const role = clean(input.jobTitle);
+  const company = clean(input.company);
+  if (role && company) return `Ver salários de ${role} na ${company} no Glassdoor`;
+  if (role) return `Ver salários de ${role} no Glassdoor`;
+  if (company) return `Ver salários de ${company} no Glassdoor`;
+  return "Ver salários no Glassdoor";
 }
 
-function glassdoorKeyword(company?: string, jobTitle?: string): string | undefined {
-  const parts = [clean(company), clean(jobTitle)].filter(Boolean);
+/** Cargo primeiro, empresa depois. Sem um dos dois, fica só o que existir. */
+function glassdoorKeyword(jobTitle?: string, company?: string): string | undefined {
+  const parts = [clean(jobTitle), clean(company)].filter(Boolean);
   return parts.length ? parts.join(" ") : undefined;
 }
 

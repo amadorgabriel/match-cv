@@ -90,6 +90,8 @@ export const SalarySchema = z.object({
     location: z.string().optional(),
     company: z.string().optional(),
     matchedQuery: z.string().optional(),
+    /** Cargo parecido que a fonte devolveu, quando a vaga exata não teve faixa. */
+    comparedRole: z.string().optional(),
   }),
   /** Aviso quando a faixa é de um cargo parecido, não da vaga exata. */
   similarRoleNote: z.string().optional(),

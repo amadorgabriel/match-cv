@@ -169,7 +169,6 @@ function SalaryCard({ salary }: { salary: Salary }) {
           <p className="text-muted-foreground mt-1 text-sm">
             Consultamos as fontes desta vaga e não houve números suficientes para montar uma faixa.
           </p>
-          <GlassdoorSalaryLink company={salary.query.company} jobTitle={salary.query.jobTitle} />
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-3">
@@ -206,6 +205,7 @@ function SalaryCard({ salary }: { salary: Salary }) {
           {salary.similarRoleNote}
         </p>
       ) : null}
+      <GlassdoorSalaryLink company={salary.query.company} jobTitle={salary.query.comparedRole || salary.query.jobTitle} />
       {salary.tried && salary.tried.length > 0 ? (
         <div>
           <p className="text-sm font-medium">O que foi consultado</p>

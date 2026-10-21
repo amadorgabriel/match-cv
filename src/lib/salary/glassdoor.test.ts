@@ -18,11 +18,21 @@ describe("glassdoorSalarySearchUrl", () => {
     );
   });
 
-  it("junta empresa e cargo e usa a empresa no texto do link", () => {
+  it("prioriza cargo e empresa na mesma busca e no texto do link", () => {
+    const url = glassdoorSalarySearchUrl({ company: "Itaú Unibanco", jobTitle: "Desenvolvedor Front-end" });
+    expect(url).toBe(
+      "https://www.glassdoor.com.br/Sal%C3%A1rios/desenvolvedor-front-end-ita%C3%BA-unibanco-sal%C3%A1rio-SRCH_KO0,37.htm",
+    );
+    expect(glassdoorSalaryLinkLabel({ company: "Itaú Unibanco", jobTitle: "Desenvolvedor Front-end" })).toBe(
+      "Ver salários de Desenvolvedor Front-end na Itaú Unibanco no Glassdoor",
+    );
+  });
+
+  it("junta cargo e empresa curtos com o cargo na frente", () => {
     const url = glassdoorSalarySearchUrl({ company: "Nubank", jobTitle: "desenvolvedor" });
-    expect(url).toBe("https://www.glassdoor.com.br/Sal%C3%A1rios/nubank-desenvolvedor-sal%C3%A1rio-SRCH_KO0,20.htm");
+    expect(url).toBe("https://www.glassdoor.com.br/Sal%C3%A1rios/desenvolvedor-nubank-sal%C3%A1rio-SRCH_KO0,20.htm");
     expect(glassdoorSalaryLinkLabel({ company: "Nubank", jobTitle: "desenvolvedor" })).toBe(
-      "Ver salários de Nubank no Glassdoor",
+      "Ver salários de desenvolvedor na Nubank no Glassdoor",
     );
   });
 
