@@ -30,7 +30,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   await connection();
   return (
     <html lang="pt-BR" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">
+      {/* ColorZilla e extensões parecidas escrevem cz-shortcut-listen no body depois do SSR. */}
+      <body className="flex min-h-full flex-col" suppressHydrationWarning>
         <SiteHeader />
         <main className="flex flex-1 flex-col px-4 py-10">{children}</main>
         <SiteFooter />
