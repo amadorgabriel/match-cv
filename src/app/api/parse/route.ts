@@ -17,7 +17,7 @@ const MIN_EXTRACTED_CHARS = 50;
  * DOCX e PDF sem texto (imagem escaneada) são recusados.
  */
 export async function POST(req: Request) {
-  const limited = checkRateLimit(req, "parse", 20);
+  const limited = await checkRateLimit(req, "parse", 20);
   if (limited) return limited;
 
   const length = Number(req.headers.get("content-length") ?? 0);

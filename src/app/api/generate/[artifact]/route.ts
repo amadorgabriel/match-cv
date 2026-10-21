@@ -27,7 +27,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
   const { artifact } = await ctx.params;
   if (!isArtifact(artifact)) return jsonError(404, "unknown_artifact", "Artefato desconhecido.");
 
-  const limited = checkRateLimit(req, "generate", 30);
+  const limited = await checkRateLimit(req, "generate", 30);
   if (limited) return limited;
 
   const parsed = await readJson(req, GenerateRequestSchema, GENERATE_REQUEST_MAX_BYTES);

@@ -47,6 +47,11 @@ export function logModelUsage(input: object): void {
   console.info(line);
 }
 
+/** Aviso operacional. A mensagem passa pelo mesmo mascaramento dos erros. */
+export function logApiWarning(message: string, secrets: Array<string | undefined> = []): void {
+  console.warn(redactSecrets(message, secrets));
+}
+
 export function logApiError(input: {
   route: string;
   error: unknown;

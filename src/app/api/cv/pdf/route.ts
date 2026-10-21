@@ -12,7 +12,7 @@ import { logApiError } from "@/lib/security/redact";
  * A prévia na tela usa o mesmo documento no navegador.
  */
 export async function POST(req: Request) {
-  const limited = checkRateLimit(req, "cv-pdf", 30);
+  const limited = await checkRateLimit(req, "cv-pdf", 30);
   if (limited) return limited;
 
   const parsed = await readJson(req, CvSchema, 100_000);

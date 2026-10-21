@@ -12,7 +12,7 @@ import { logApiError } from "@/lib/security/redact";
  * Com a IA desligada (mock), só checa o formato.
  */
 export async function POST(req: Request) {
-  const limited = checkRateLimit(req, "key-validate", 10);
+  const limited = await checkRateLimit(req, "key-validate", 10);
   if (limited) return limited;
 
   const parsed = await readJson(req, ValidateKeyRequestSchema, 5_000);
