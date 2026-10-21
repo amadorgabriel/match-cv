@@ -7,11 +7,6 @@ export function SiteHeader() {
         <Link href="/" className="text-lg font-semibold tracking-tight">
           Match<span className="text-primary/70">CV</span>
         </Link>
-        <nav className="flex items-center gap-4 text-sm">
-          <Link href="/gerar" className="text-muted-foreground hover:text-foreground">
-            Começar
-          </Link>
-        </nav>
       </div>
     </header>
   );
