@@ -1,5 +1,7 @@
 # MatchCV
 
+Produção: https://match-cv-app.vercel.app/
+
 Plataforma web **sem login** para ajudar em candidaturas a vagas de TI. O usuário envia o currículo em PDF e a descrição da vaga, escolhe um provedor de IA, informa a própria API key e recebe cinco materiais:
 
 1. **CV em PDF compatível com ATS**, alinhado à vaga
