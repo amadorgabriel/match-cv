@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("next/cache", () => ({ cacheLife: () => {} }));
 
-import { guessJobTitle, histogramPercentile, normalizeHistogram, searchAdzuna } from "./adzuna";
+import { adzunaHistogramArgs, guessJobTitle, histogramPercentile, normalizeHistogram, searchAdzuna } from "./adzuna";
 import { analyzeJob } from "./job";
 
 describe("histogramPercentile", () => {
@@ -70,5 +71,21 @@ describe("searchAdzuna", () => {
     expect(seen[3]?.what_and).toBe("full stack");
     expect(seen[3]?.what_or).toContain("desenvolvedor júnior full stack");
     expect(normalizeHistogram({ "80000": "3" })).toEqual({ "80000": 3 });
+  });
+});
+
+describe("adzunaHistogramArgs", () => {
+  it("não coloca credencial na chave do cache", () => {
+    const args = adzunaHistogramArgs({ what: "desenvolvedor full stack", where: "São Paulo" }, "br");
+    const serialized = JSON.stringify(args);
+    expect(serialized).not.toMatch(/app_id|app_key/);
+    expect(args).toEqual({
+      what: "desenvolvedor full stack",
+      whatAnd: "",
+      whatOr: "",
+      where: "São Paulo",
+      country: "br",
+    });
+    expect(Object.keys(args).sort()).toEqual(["country", "what", "whatAnd", "whatOr", "where"]);
   });
 });

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cacheLife } from "next/cache";
+
 import { mockSalary } from "@/lib/mock/outputs";
 import type { Salary } from "@/lib/schemas/outputs";
 
@@ -92,7 +94,9 @@ export async function searchAdzuna(
   for (const query of buildSalaryQueries(job)) {
     const label = describeQuery(query);
     try {
-      const histogram = await fetchHistogram(query, creds, country, fetchImpl);
+      const histogram = options?.fetchImpl
+        ? await fetchHistogram(query, creds, country, fetchImpl)
+        : await readCachedHistogram(adzunaHistogramArgs(query, country));
       const match = matchFromHistogram(histogram, query);
       if (!match) {
         tried.push(`${label}: sem dados`);
@@ -143,8 +147,52 @@ export async function fetchSalaryRange(params: {
   return combineSalary(job, [adzunaObservation(job, result.match)], result.tried);
 }
 
+/** Campos públicos da consulta. Credenciais ficam de fora de propósito: viram chave de cache. */
+export function adzunaHistogramArgs(query: Pick<SalaryQuery, "what" | "whatAnd" | "whatOr" | "where">, country: string) {
+  return {
+    what: query.what ?? "",
+    whatAnd: query.whatAnd ?? "",
+    whatOr: query.whatOr ?? "",
+    where: query.where ?? "",
+    country,
+  };
+}
+
+/**
+ * Histograma da Adzuna por 1 dia. Consulta vazia dura 1 hora.
+ * A chave é só o argumento público. app_id e app_key são lidos aqui de
+ * process.env e o fetch usa cache: "no-store" para a URL com a chave não
+ * entrar em outro cache.
+ */
+async function readCachedHistogram(key: ReturnType<typeof adzunaHistogramArgs>): Promise<Record<string, number>> {
+  const cached = await cachedAdzunaHistogram(key);
+  if (!cached.ok) throw new Error("adzuna_unavailable");
+  return cached.histogram;
+}
+
+async function cachedAdzunaHistogram(
+  key: ReturnType<typeof adzunaHistogramArgs>,
+): Promise<{ ok: true; histogram: Record<string, number> } | { ok: false }> {
+  "use cache";
+  const creds = getAdzunaCredentials();
+  if (!creds) {
+    cacheLife({ revalidate: 60, expire: 120 });
+    return { ok: false };
+  }
+  try {
+    const histogram = await fetchHistogram(key, creds, key.country, fetch);
+    const sample = Object.values(histogram).reduce((acc, count) => acc + count, 0);
+    if (sample <= 0) cacheLife({ revalidate: 3600, expire: 7200 });
+    else cacheLife({ revalidate: 86_400, expire: 604_800 });
+    return { ok: true, histogram };
+  } catch {
+    cacheLife({ revalidate: 300, expire: 600 });
+    return { ok: false };
+  }
+}
+
 async function fetchHistogram(
-  query: SalaryQuery,
+  query: { what?: string; whatAnd?: string; whatOr?: string; where?: string },
   creds: AdzunaCredentials,
   country: string,
   fetchImpl: typeof fetch,
