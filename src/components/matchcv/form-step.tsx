@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { isProviderId, PROVIDER_IDS, PROVIDERS, type ProviderId } from "@/lib/ai/catalog";
+import { isProviderId, PROVIDER_IDS, PROVIDERS, selectableModels, type ProviderId } from "@/lib/ai/catalog";
 import { validateKey } from "@/lib/client/api";
 import { clearStoredKey, parseStoredKey, readStoredKey, saveStoredKey, subscribeNoop } from "@/lib/client/key-storage";
 import { maskKey } from "@/lib/client/mask";
@@ -68,13 +68,17 @@ export function FormStep({ initial, onSubmit }: Props) {
   const storedProvider = stored && isProviderId(stored.provider) ? stored.provider : null;
   const provider: ProviderId = providerInput ?? storedProvider ?? "openai";
   const providerInfo = PROVIDERS[provider];
-  const model = modelInput ?? (storedProvider === provider ? stored?.model : undefined) ?? providerInfo.defaultModel;
+  const models = useMemo(() => selectableModels(providerInfo), [providerInfo]);
+  const storedModel = storedProvider === provider ? stored?.model : undefined;
+  const requestedModel = modelInput ?? storedModel ?? providerInfo.defaultModel;
+  const model = models.some((item) => item.id === requestedModel) ? requestedModel : providerInfo.defaultModel;
   const apiKey = apiKeyInput ?? stored?.apiKey ?? "";
   const remember = rememberInput ?? stored !== null;
+  const paidModels = providerInfo.models.filter((item) => item.paidOnly);
 
   const modelItems = useMemo(
-    () => Object.fromEntries(providerInfo.models.map((m) => [m.id, m.unverified ? `${m.label} (ID a confirmar)` : m.label])),
-    [providerInfo],
+    () => Object.fromEntries(models.map((m) => [m.id, m.unverified ? `${m.label} (ID a confirmar)` : m.label])),
+    [models],
   );
 
   function changeProvider(next: ProviderId) {
@@ -290,13 +294,18 @@ export function FormStep({ initial, onSubmit }: Props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {providerInfo.models.map((m) => (
+                  {models.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {modelItems[m.id]}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {paidModels.map((m) => (
+                <p key={m.id} className="text-muted-foreground text-xs">
+                  {m.label}. Fora do seletor.
+                </p>
+              ))}
             </div>
           </div>
 

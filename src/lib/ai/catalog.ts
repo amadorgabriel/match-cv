@@ -21,6 +21,11 @@ export interface ModelOption {
   label: string;
   /** true quando o ID ainda não foi confirmado no `/models` do provedor */
   unverified?: boolean;
+  /**
+   * Modelo só do plano pago. Continua no catálogo para ficar explícito,
+   * mas o seletor não o oferece: a chave gratuita falha nele.
+   */
+  paidOnly?: boolean;
 }
 
 export interface ProviderOption {
@@ -67,7 +72,11 @@ export const PROVIDERS: Record<ProviderId, ProviderOption> = {
     defaultModel: "gemini-3.8-flash",
     models: [
       { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (recomendado)" },
-      { id: "gemini-4-argon", label: "Gemini 4 Argon (premium)" },
+      {
+        id: "gemini-4-argon",
+        label: "Gemini 4 Argon (pago — exige chave com faturamento)",
+        paidOnly: true,
+      },
     ],
   },
   together: {
@@ -99,6 +108,11 @@ export const PROVIDERS: Record<ProviderId, ProviderOption> = {
 
 export function isProviderId(value: unknown): value is ProviderId {
   return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
+}
+
+/** Modelos que o seletor pode escolher. Os pagos ficam só como aviso. */
+export function selectableModels(provider: ProviderOption): ModelOption[] {
+  return provider.models.filter((model) => !model.paidOnly);
 }
 
 /** Formato aceito para IDs de modelo (evita injeção em URL/headers). */
