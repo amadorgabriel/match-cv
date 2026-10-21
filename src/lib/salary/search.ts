@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ProviderId } from "@/lib/ai/catalog";
+import type { ModelCallContext } from "@/lib/ai/telemetry-context";
 import { supportsNativeWebSearch } from "@/lib/ai/providers";
 import { mockSalary } from "@/lib/mock/outputs";
 import { SalarySchema, type Salary } from "@/lib/schemas/outputs";
@@ -30,6 +31,7 @@ export async function lookupSalary(input: {
   apiKey?: string;
   realAi: boolean;
   signal?: AbortSignal;
+  telemetry?: ModelCallContext;
 }): Promise<Salary> {
   const job = analyzeJob(input);
   const webProvider = input.realAi && input.provider && input.model && input.apiKey && supportsNativeWebSearch(input.provider)
@@ -67,6 +69,7 @@ export async function lookupSalary(input: {
         model: input.model,
         apiKey: input.apiKey,
         signal: input.signal,
+        telemetry: input.telemetry,
       });
       if (!web) tried.push("Busca na web sem resposta utilizável.");
       else {

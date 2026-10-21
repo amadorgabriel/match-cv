@@ -1,4 +1,5 @@
 import { isRealAiEnabled } from "@/lib/ai/flags";
+import { readModelCallContext } from "@/lib/ai/telemetry-context";
 import { providerRateLimitMessage } from "@/lib/ai/provider-error";
 import { lookupSalary, SalaryRateLimitError } from "@/lib/salary/search";
 import type { Salary } from "@/lib/schemas/outputs";
@@ -37,7 +38,16 @@ export async function POST(req: Request) {
 
   const started = Date.now();
   try {
-    const salary = await lookupSalary({ ...parsed.data, realAi: isRealAiEnabled(), signal: req.signal });
+    const salary = await lookupSalary({
+      ...parsed.data,
+      realAi: isRealAiEnabled(),
+      signal: req.signal,
+      telemetry: readModelCallContext(req, {
+        provider: parsed.data.provider ?? "none",
+        model: parsed.data.model ?? "none",
+        artifact: "salary-web",
+      }),
+    });
     return jsonOk(salary);
   } catch (err) {
     const statusCode = err instanceof SalaryRateLimitError ? 429 : 200;

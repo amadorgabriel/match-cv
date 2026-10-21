@@ -1,5 +1,7 @@
 import "server-only";
 
+import { sanitizeModelCallContext } from "@/lib/ai/telemetry-context";
+
 /**
  * Tira chaves e tokens de uma mensagem antes de logar.
  * Cobre sk-, sk-ant-, sk-or-, AIza, Bearer e os nomes de header/campo
@@ -19,6 +21,30 @@ export function redactSecrets(text: string, secrets: Array<string | undefined> =
   for (const secret of unique) out = out.split(secret).join("[redacted]");
   for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, "[redacted]");
   return out;
+}
+
+function tokenCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Uso de tokens por chamada. O objeto de entrada pode ter outros campos; eles não entram no log. */
+export function logModelUsage(input: object): void {
+  const safe = sanitizeModelCallContext(input);
+  const record = input as Record<string, unknown>;
+  const line = redactSecrets(
+    JSON.stringify({
+      event: "model_usage",
+      sessionId: safe.sessionId,
+      provider: safe.provider,
+      model: safe.model,
+      artifact: safe.artifact,
+      attempt: safe.attempt,
+      inputTokens: tokenCount(record.inputTokens),
+      outputTokens: tokenCount(record.outputTokens),
+      totalTokens: tokenCount(record.totalTokens),
+    }),
+  );
+  console.info(line);
 }
 
 export function logApiError(input: {

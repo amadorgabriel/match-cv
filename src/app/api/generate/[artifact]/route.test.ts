@@ -52,6 +52,26 @@ describe("POST /api/generate/cv", () => {
     });
   });
 
+  it("repassa só a sessão anônima para a geração", async () => {
+    process.env.MATCHCV_GENERATION_DEADLINE_MS = "10000";
+    generateArtifact.mockResolvedValue({ artifact: "cv", data: {}, mock: true, promptVersion: "cv@1.1.0" });
+    const session = "11111111-1111-4111-8111-111111111111";
+    const response = await POST(
+      new Request("http://localhost/api/generate/cv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-matchcv-session": session, "x-matchcv-attempt": "2" },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ artifact: "cv" }) },
+    );
+    expect(response.status).toBe(200);
+    const options = JSON.stringify(generateArtifact.mock.calls[0]?.[2]);
+    expect(options).toContain(session);
+    expect(options).toContain('"attempt":"2"');
+    expect(options).not.toContain(body.resumeText);
+    expect(options).not.toContain(body.apiKey);
+  });
+
   it("devolve JSON quando o provedor fecha a conexão", async () => {
     process.env.MATCHCV_GENERATION_DEADLINE_MS = "10000";
     generateArtifact.mockRejectedValue(Object.assign(new Error("fetch failed"), { cause: { code: "ECONNRESET" } }));

@@ -138,6 +138,16 @@ O plano Hobby é gratuito, mas só vale para uso pessoal e não comercial.
 - Rate limit por IP em todas as rotas. É em memória, então em serverless o limite é aproximado. Para algo mais forte, use Upstash Redis ou o Vercel Firewall.
 - Respostas de erro genéricas, sem ecoar a chave ou o corpo do request.
 
+## Telemetria
+
+Cada chamada `generateText` liga `experimental_telemetry` com `recordInputs` e `recordOutputs` desligados. O span e o log levam só cinco campos: sessão anônima, provedor, modelo, artefato e tentativa. O currículo, a vaga, a chave e o IP não entram.
+
+A sessão anônima é um UUID em `sessionStorage` (`matchcv:anon-session`), enviado no header `x-matchcv-session`. A tentativa vai em `x-matchcv-attempt`.
+
+`src/instrumentation.ts` registra o OpenTelemetry com `@vercel/otel`. Na Vercel, os spans aparecem em **Observability**, no projeto. O uso de tokens sai no log da função como uma linha JSON com `"event":"model_usage"`. Dá para filtrar por esse texto em **Logs**.
+
+O Langfuse só entra se `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` e `LANGFUSE_BASEURL` estiverem definidas. Sem as três, o exporter não é criado. Ele também mascara padrões de chave e só exporta spans com o atributo `matchcv.artifact`.
+
 ## Pós-MVP (não implementado)
 
 Estas funcionalidades ficam para uma fase separada e **não fazem parte deste código**:

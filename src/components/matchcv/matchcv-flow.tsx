@@ -76,7 +76,7 @@ export function MatchCvFlow() {
     try {
       if (artifact !== "cv") await loadBrief(payload, signal);
       if (signal?.aborted) return;
-      const r = await retryAsync(() => generate(artifact, payload, signal), {
+      const r = await retryAsync((attempt) => generate(artifact, payload, signal, attempt), {
         attempts: RETRY_ATTEMPTS,
         signal,
         shouldRetry: (error) => !signal?.aborted && isRetryableClientError(error),
@@ -109,7 +109,7 @@ export function MatchCvFlow() {
     }, 1600);
     try {
       const salary = await retryAsync(
-        () => {
+        (attempt) => {
           hold = false;
           return fetchSalary(
             {
@@ -119,6 +119,7 @@ export function MatchCvFlow() {
               apiKey: payload.apiKey,
             },
             signal,
+            attempt,
           );
         },
         {

@@ -1,5 +1,6 @@
 import { generateBrief } from "@/lib/ai/brief";
 import { isRealAiEnabled } from "@/lib/ai/flags";
+import { readModelCallContext } from "@/lib/ai/telemetry-context";
 import { isProviderTimeout, PROVIDER_SLOW_MESSAGE, withGenerationDeadline } from "@/lib/ai/generation-deadline";
 import { providerRateLimitMessage, readProviderHttpFailure } from "@/lib/ai/provider-error";
 import { ProviderConfigError } from "@/lib/ai/providers";
@@ -23,7 +24,15 @@ export async function POST(req: Request) {
   const started = Date.now();
   const deadline = withGenerationDeadline(req.signal);
   try {
-    const result = await generateBrief(parsed.data, { realAi: isRealAiEnabled(), abortSignal: deadline.signal });
+    const result = await generateBrief(parsed.data, {
+      realAi: isRealAiEnabled(),
+      abortSignal: deadline.signal,
+      telemetry: readModelCallContext(req, {
+        provider: parsed.data.provider,
+        model: parsed.data.model,
+        artifact: "brief",
+      }),
+    });
     return jsonOk(result);
   } catch (err) {
     if (req.signal.aborted && !deadline.timedOut()) return new Response(null, { status: 499 });

@@ -1,4 +1,5 @@
 import { isRealAiEnabled } from "@/lib/ai/flags";
+import { readModelCallContext } from "@/lib/ai/telemetry-context";
 import { generateArtifact } from "@/lib/ai/generate";
 import { isProviderTimeout, PROVIDER_SLOW_MESSAGE, withGenerationDeadline } from "@/lib/ai/generation-deadline";
 import { providerRateLimitMessage, readProviderHttpFailure } from "@/lib/ai/provider-error";
@@ -38,6 +39,11 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
     const result = await generateArtifact(artifact, parsed.data, {
       realAi: isRealAiEnabled(),
       abortSignal: deadline.signal,
+      telemetry: readModelCallContext(req, {
+        provider: parsed.data.provider,
+        model: parsed.data.model,
+        artifact,
+      }),
     });
     return jsonOk(result);
   } catch (err) {
