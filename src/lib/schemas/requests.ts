@@ -70,15 +70,22 @@ export const DEFAULT_OUTPUT_SELECTION: OutputSelection = {
 
 const ARTIFACT_OUTPUTS = ["cv", "email", "cover-letter", "interview"] as const;
 
+/** E-mail, cover letter e entrevista consomem o perfil extraído em POST /api/brief. */
+const BRIEF_OUTPUTS = ["email", "cover-letter", "interview"] as const;
+
+export type ProcessingStepId = "parse" | "brief" | OutputId;
+
 /**
  * Etapas do processamento para a seleção do formulário.
- * A leitura do PDF só entra quando algum texto de IA foi marcado.
- * CV PDF, e-mail, cover letter, entrevista e faixa salarial só entram se marcados.
+ * A leitura do PDF entra quando algum texto de IA foi marcado.
+ * A análise da vaga entra só para e-mail, cover letter ou entrevista.
+ * CV, e-mail, cover letter, entrevista e faixa salarial só entram se marcados.
  */
-export function processingStepsFor(selection: OutputSelection): Array<"parse" | OutputId> {
-  const steps: Array<"parse" | OutputId> = [];
+export function processingStepsFor(selection: OutputSelection): ProcessingStepId[] {
+  const steps: ProcessingStepId[] = [];
   const artifacts = ARTIFACT_OUTPUTS.filter((id) => selection[id]);
   if (artifacts.length > 0) steps.push("parse");
+  if (BRIEF_OUTPUTS.some((id) => selection[id])) steps.push("brief");
   steps.push(...artifacts);
   if (selection.salary) steps.push("salary");
   return steps;
