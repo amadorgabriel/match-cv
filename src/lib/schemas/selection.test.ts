@@ -37,7 +37,7 @@ describe("seleção de materiais", () => {
     expect(processingStepsFor(DEFAULT_OUTPUT_SELECTION)).toEqual(["parse", "cv"]);
   });
 
-  it("inclui e-mail, carta e entrevista quando esses itens estão marcados", () => {
+  it("inclui a análise da vaga, o e-mail, a carta e a entrevista quando esses itens estão marcados", () => {
     expect(
       processingStepsFor({
         cv: false,
@@ -46,7 +46,7 @@ describe("seleção de materiais", () => {
         interview: true,
         salary: false,
       }),
-    ).toEqual(["parse", "email", "cover-letter", "interview"]);
+    ).toEqual(["parse", "brief", "email", "cover-letter", "interview"]);
   });
 
   it("só consulta /api/salary quando a faixa salarial é o único material", () => {
@@ -54,9 +54,16 @@ describe("seleção de materiais", () => {
   });
 
   it("lê o currículo apenas quando há texto de IA para gerar", () => {
-    expect(processingStepsFor({ ...none, email: true })).toEqual(["parse", "email"]);
+    expect(processingStepsFor({ ...none, email: true })).toEqual(["parse", "brief", "email"]);
     expect(processingStepsFor({ ...none, salary: true })).not.toContain("parse");
     expect(processingStepsFor({ ...none, cv: true })).toEqual(["parse", "cv"]);
+  });
+
+  it("analisa a vaga só para e-mail, carta ou entrevista", () => {
+    expect(processingStepsFor({ ...none, cv: true, salary: true })).toEqual(["parse", "cv", "salary"]);
+    expect(processingStepsFor({ ...none, cv: true, email: true })).toEqual(["parse", "brief", "cv", "email"]);
+    expect(processingStepsFor({ ...none, salary: true })).not.toContain("brief");
+    expect(processingStepsFor(DEFAULT_OUTPUT_SELECTION)).not.toContain("brief");
   });
 
   it("exige pelo menos um material", () => {
