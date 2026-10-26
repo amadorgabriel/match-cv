@@ -120,7 +120,6 @@ function sourceDomain(url: string): string | undefined {
 }
 
 function SalarySources({ salary }: { salary: Salary }) {
-  const showsAdzuna = salary.sources.some((source) => source.name.toLowerCase() === "adzuna");
   return (
     <div className="border-t pt-3 text-sm">
       {salary.sources.length > 0 ? (
@@ -143,7 +142,6 @@ function SalarySources({ salary }: { salary: Salary }) {
       ) : (
         <p className="text-muted-foreground">Nenhuma fonte devolveu um link desta vez.</p>
       )}
-      {showsAdzuna ? <p className="text-muted-foreground mt-2 text-xs">Jobs by Adzuna. Estimativas salariais: Adzuna Jobsworth.</p> : null}
     </div>
   );
 }
@@ -400,7 +398,7 @@ export function ResultsStep({ results, jobDescription, steps, isMock, regenerati
           <Card>
             <CardHeader>
               <CardTitle>Faixa salarial estimada</CardTitle>
-              <CardDescription>Adzuna e, quando o provedor permite, busca pública na web. Sem número, a faixa fica indisponível.</CardDescription>
+              <CardDescription>Busca pública na web e link de referência do Glassdoor. Sem número, a faixa fica indisponível.</CardDescription>
               {results.salary ? (
                 <CardAction>
                   <RegenerateButton id="salary" regenerating={regenerating} onClick={() => onRegenerate("salary")} />

@@ -9,7 +9,7 @@ export type SalaryContract = "CLT" | "PJ" | "misto" | "desconhecido";
 const FX_TO_BRL: Record<SalaryCurrency, number> = { BRL: 1, USD: 5.5, EUR: 6 };
 
 export interface SalaryObservation {
-  origin: "adzuna" | "web";
+  origin: "web";
   min: number;
   median?: number;
   max: number;
@@ -48,6 +48,22 @@ export function rangesOverlap(left: { min: number; max: number }, right: { min: 
   return left.min <= right.max && right.min <= left.max;
 }
 
+/**
+ * Alta: duas ou mais faixas da web se cruzam, ou uma faixa cita duas páginas.
+ * Média: pelo menos uma fonte citada.
+ * Baixa: números sem página citada.
+ */
+export function confidenceFor(input: {
+  ranges: Array<{ min: number; max: number }>;
+  sources: Salary["sources"];
+}): "alta" | "media" | "baixa" {
+  const urls = new Set(input.sources.map((source) => source.url.replace(/\/$/, "")));
+  const concordant = input.ranges.length >= 2 && input.ranges.every((range) => rangesOverlap(range, input.ranges[0]));
+  if (concordant || (input.ranges.length === 1 && urls.size >= 2)) return "alta";
+  if (urls.size >= 1) return "media";
+  return "baixa";
+}
+
 export function combineSalary(
   job: JobAnalysis,
   observations: SalaryObservation[],
@@ -76,31 +92,30 @@ export function combineSalary(
   }
 
   const monthly = usable.map((item) => ({ item, money: toMonthlyBrl(item) }));
-  const adzuna = monthly.filter((item) => item.item.origin === "adzuna");
-  const web = monthly.filter((item) => item.item.origin === "web");
-  const concordant = adzuna.length > 0 && web.length > 0 && rangesOverlap(adzuna[0].money, web[0].money);
-  const chosen = concordant ? monthly : adzuna.length > 0 ? adzuna : web;
-  const confidence = concordant ? "alta" : adzuna.length > 0 ? "media" : "baixa";
-  const min = average(chosen.map((item) => item.money.min));
-  const max = average(chosen.map((item) => item.money.max));
-  const medians = chosen.map((item) => item.money.median).filter((value): value is number => value !== undefined);
-  const primary = chosen[0].item;
-  const exact = chosen.every((item) => item.item.exact);
+  const ranges = monthly.map((item) => item.money);
+  const concordant = ranges.length >= 2 && ranges.every((range) => rangesOverlap(range, ranges[0]));
+  const sources = dedupeSources([...monthly.flatMap((item) => item.item.sources), ...extraSources]);
+  const confidence = confidenceFor({ ranges, sources });
+  const min = average(ranges.map((item) => item.min));
+  const max = average(ranges.map((item) => item.max));
+  const medians = monthly.map((item) => item.money.median).filter((value): value is number => value !== undefined);
+  const primary = monthly[0].item;
+  const exact = monthly.every((item) => item.item.exact);
   const roleFound = primary.roleFound;
   const note = !exact ? primary.similarRoleNote || similarRoleNote(job.seniority, roleFound, false) : undefined;
-  const fx = chosen.some((item) => item.money.fx);
-  const contracts = new Set(chosen.map((item) => item.item.contract).filter((value): value is SalaryContract => !!value && value !== "desconhecido"));
-  const sampleSize = adzuna[0]?.item.sampleSize;
+  const fx = monthly.some((item) => item.money.fx);
+  const contracts = new Set(monthly.map((item) => item.item.contract).filter((value): value is SalaryContract => !!value && value !== "desconhecido"));
+  const sampleSize = monthly.map((item) => item.item.sampleSize).find((value) => value !== undefined);
 
   const notes = [
-    "Estimativa em reais por mês. Não substitui uma proposta e pode misturar CLT e PJ.",
+    "Estimativa em reais por mês, a partir de busca pública na web. Não substitui uma proposta e pode misturar CLT e PJ.",
   ];
-  if (chosen.some((item) => item.item.period === "year" || item.item.origin === "adzuna")) {
+  if (monthly.some((item) => item.item.period === "year")) {
     notes.push("Valores anuais foram divididos por 12.");
   }
   if (fx) notes.push("Valores em moeda estrangeira usam câmbio aproximado de 5,50 para o dólar e 6,00 para o euro.");
-  if (adzuna.length > 0 && web.length > 0 && !concordant) {
-    notes.push("As fontes divergem. A faixa mostrada prioriza o histograma da Adzuna.");
+  if (monthly.length > 1 && !concordant) {
+    notes.push("As fontes públicas divergem. A faixa mostrada é a média das faixas encontradas na web.");
   }
 
   return {
@@ -114,7 +129,7 @@ export function combineSalary(
     contract: contracts.size === 1 ? [...contracts][0] : contracts.size > 1 ? "misto" : undefined,
     query: {
       ...baseQuery,
-      matchedQuery: chosen.map((item) => item.item.matchedQuery).filter(Boolean).join("; ") || undefined,
+      matchedQuery: monthly.map((item) => item.item.matchedQuery).filter(Boolean).join("; ") || undefined,
       comparedRole: !exact && roleFound ? roleFound : undefined,
     },
     similarRoleNote: note,
@@ -122,7 +137,7 @@ export function combineSalary(
     sampleSize,
     isEstimate: true,
     isMock: false,
-    sources: dedupeSources([...monthly.flatMap((item) => item.item.sources), ...extraSources]),
+    sources,
     disclaimer: notes.join(" "),
   };
 }

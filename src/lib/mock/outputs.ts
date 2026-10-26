@@ -118,14 +118,8 @@ export function mockSalary(jobTitle: string, location?: string): Salary {
     isMock: true,
     available: true,
     confidence: "media",
-    sources: [
-      {
-        name: "Adzuna",
-        url: "https://www.adzuna.com.br",
-        note: "Dados de exemplo. Configure ADZUNA_APP_ID e ADZUNA_APP_KEY para consultar a API real.",
-      },
-    ],
+    sources: [],
     disclaimer:
-      "Estimativa baseada em anúncios de vagas. Não distingue CLT de PJ e depende do volume de anúncios para o cargo e a cidade.",
+      "Estimativa de exemplo em reais por mês, a partir de busca pública na web. Não substitui uma proposta. O Glassdoor entra só como link de referência.",
   };
 }
