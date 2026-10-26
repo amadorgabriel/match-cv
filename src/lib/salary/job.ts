@@ -1,33 +1,18 @@
 /**
  * Leitura da vaga para a faixa salarial.
- * Puro: o navegador usa as mensagens de progresso e o servidor monta as queries.
+ * Puro: o navegador usa as mensagens de progresso e o servidor normaliza o cargo.
  */
 
 export type Seniority = "estágio" | "júnior" | "pleno" | "sênior" | "lead";
-export type QueryKind = "exact_location" | "title" | "family" | "related_seniority";
 
 export interface JobAnalysis {
   rawTitle: string;
   normalizedTitle: string;
   family: string;
-  familyTerms: string[];
-  relatedTerms: string[];
-  /** Termos que distinguem a família, para o what_and da senioridade próxima. */
-  anchor: string;
   seniority?: Seniority;
   company?: string;
   location?: string;
   remote: boolean;
-}
-
-export interface SalaryQuery {
-  kind: QueryKind;
-  label: string;
-  foundRole: string;
-  what?: string;
-  whatAnd?: string;
-  whatOr?: string;
-  where?: string;
 }
 
 const SENIORITY_RULES: { source: string; label: Seniority }[] = [
@@ -38,76 +23,63 @@ const SENIORITY_RULES: { source: string; label: Seniority }[] = [
   { source: "lead|staff|principal", label: "lead" },
 ];
 
-const TITLE_RULES: { re: RegExp; title: string; family: string; terms: string[] }[] = [
+const TITLE_RULES: { re: RegExp; title: string; family: string }[] = [
   {
     re: /full[\s-]*stack/,
     title: "desenvolvedor full stack",
     family: "desenvolvedor full stack",
-    terms: ["desenvolvedor full stack", "full stack developer"],
   },
   {
     re: /front[\s-]*end|frontend/,
     title: "desenvolvedor front-end",
     family: "desenvolvedor front-end",
-    terms: ["desenvolvedor front-end", "front-end developer", "desenvolvedor frontend"],
   },
   {
     re: /back[\s-]*end|backend/,
     title: "desenvolvedor back-end",
     family: "desenvolvedor back-end",
-    terms: ["desenvolvedor back-end", "back-end developer", "desenvolvedor backend"],
   },
   {
     re: /devops|\bsre\b|site reliability/,
     title: "engenheiro devops",
     family: "devops",
-    terms: ["engenheiro devops", "devops", "sre"],
   },
   {
     re: /engenheiro de dados|data engineer/,
     title: "engenheiro de dados",
     family: "dados",
-    terms: ["engenheiro de dados", "data engineer"],
   },
   {
     re: /cientista de dados|data scientist/,
     title: "cientista de dados",
     family: "dados",
-    terms: ["cientista de dados", "data scientist"],
   },
   {
     re: /analista de dados|data analyst/,
     title: "analista de dados",
     family: "dados",
-    terms: ["analista de dados", "data analyst"],
   },
   {
     re: /engenheiro de software|software engineer/,
     title: "engenheiro de software",
     family: "desenvolvedor",
-    terms: ["engenheiro de software", "software engineer", "desenvolvedor"],
   },
   {
     re: /desenvolvedor|developer|programador|programmer/,
     title: "desenvolvedor",
     family: "desenvolvedor",
-    terms: ["desenvolvedor", "developer"],
   },
   {
     re: /\bqa\b|quality assurance|analista de (teste|qualidade)/,
     title: "analista de qualidade",
     family: "qualidade",
-    terms: ["analista de qualidade", "qa", "analista de testes"],
   },
   {
     re: /product owner|\bpo\b|gerente de produto|product manager/,
     title: "product manager",
     family: "produto",
-    terms: ["product manager", "gerente de produto", "product owner"],
   },
 ];
-
-const STOP_WORDS = new Set(["desenvolvedor", "desenvolvedora", "engenheiro", "engenheira", "de", "da", "do", "em"]);
 
 export function analyzeJob(input: { jobTitle?: string; location?: string; jobDescription?: string }): JobAnalysis {
   const description = input.jobDescription ?? "";
@@ -121,17 +93,11 @@ export function analyzeJob(input: { jobTitle?: string; location?: string; jobDes
   const fallback = stripNoise(rest) || "desenvolvedor";
   const normalizedTitle = rule?.title ?? fallback;
   const family = rule?.family ?? normalizedTitle;
-  const familyTerms = rule?.terms ?? [normalizedTitle];
-  const relatedTerms = relatedRoles(normalizedTitle, seniority);
-  const anchor = anchorOf(normalizedTitle);
 
   return {
     rawTitle,
     normalizedTitle,
     family,
-    familyTerms,
-    relatedTerms,
-    anchor,
     seniority,
     company,
     location: place.location,
@@ -139,50 +105,9 @@ export function analyzeJob(input: { jobTitle?: string; location?: string; jobDes
   };
 }
 
-export function buildSalaryQueries(job: JobAnalysis): SalaryQuery[] {
-  const queries: SalaryQuery[] = [];
-  const title = job.normalizedTitle;
-  if (job.location && !job.remote) {
-    queries.push({
-      kind: "exact_location",
-      label: `título e local (${title} em ${job.location})`,
-      foundRole: title,
-      what: title,
-      where: job.location,
-    });
-  }
-  queries.push({
-    kind: "title",
-    label: `título sem local (${title})`,
-    foundRole: title,
-    what: title,
-  });
-  queries.push({
-    kind: "family",
-    label: `família mais ampla (${job.familyTerms.join(" ou ")})`,
-    foundRole: job.family,
-    whatOr: job.familyTerms.join(" "),
-  });
-  const related = job.relatedTerms.join(" ou ");
-  queries.push({
-    kind: "related_seniority",
-    label: `senioridade próxima (${related})`,
-    foundRole: job.relatedTerms[0] ?? title,
-    whatOr: job.relatedTerms.join(" "),
-    ...(job.anchor ? { whatAnd: job.anchor } : {}),
-  });
-  return queries;
-}
-
-/** A consulta do título normalizado só é exata quando a vaga não pedia senioridade. */
-export function queryMatchesExactly(job: JobAnalysis, kind: QueryKind): boolean {
-  if (kind === "family" || kind === "related_seniority") return false;
-  return !job.seniority;
-}
-
 export function salaryProgressMessages(job: JobAnalysis): string[] {
   const target = job.company ? `${job.company} + ${job.normalizedTitle}` : job.normalizedTitle;
-  return ["Consultando Adzuna…", `Buscando na web por ${target}…`, "Comparando fontes…"];
+  return [`Buscando na web por ${target}…`, "Comparando fontes públicas…", "Preparando o link do Glassdoor…"];
 }
 
 export function similarRoleNote(seniority: string | undefined, foundRole: string, exact: boolean): string | undefined {
@@ -279,27 +204,6 @@ function stripNoise(text: string): string {
     .replace(/\b(analyst|analista)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function anchorOf(title: string): string {
-  return title
-    .split(/\s+/)
-    .filter((token) => !STOP_WORDS.has(fold(token)))
-    .join(" ");
-}
-
-function relatedRoles(title: string, seniority?: Seniority): string[] {
-  const levels = (["júnior", "pleno", "sênior"] as const).filter((level) => level !== seniority);
-  return levels.map((level) => withLevel(title, level));
-}
-
-function withLevel(title: string, level: string): string {
-  const parts = title.split(/\s+/);
-  const head = parts[0]?.toLowerCase() ?? "";
-  if (["desenvolvedor", "engenheiro", "analista", "cientista"].includes(head)) {
-    return [parts[0], level, ...parts.slice(1)].join(" ");
-  }
-  return `${title} ${level}`;
 }
 
 function fold(value: string): string {

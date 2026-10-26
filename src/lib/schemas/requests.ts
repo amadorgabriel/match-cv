@@ -95,7 +95,7 @@ export const SalaryRequestSchema = z.object({
   jobTitle: z.string().trim().min(2).max(120).optional(),
   location: z.string().trim().max(120).optional(),
   jobDescription: z.string().max(LIMITS.maxJobDescriptionChars).optional(),
-  /** Opcionais: ligam a busca na web com a chave do usuário. Sem eles, só a Adzuna. */
+  /** Opcionais: ligam a busca na web com a chave do usuário. Sem eles, a faixa fica indisponível. */
   provider: z.enum(PROVIDER_IDS).optional(),
   model: z.string().regex(MODEL_ID_PATTERN, "ID de modelo inválido").optional(),
   apiKey: apiKey.optional(),

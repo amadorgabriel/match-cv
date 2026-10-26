@@ -26,8 +26,10 @@ function unavailable(jobTitle: string): Salary {
 
 /**
  * POST /api/salary
- * Cruza a Adzuna (chave do servidor) com a busca na web do provedor do usuário.
- * Sem número, responde 200 com "faixa não disponível". 429 do provedor sobe como 429.
+ * Estima a faixa com a busca pública na web do provedor do usuário.
+ * O Glassdoor entra só como link de referência. Sem número, responde 200
+ * com "faixa não disponível". 429 do provedor sobe como 429.
+ * Com a IA desligada, devolve um exemplo.
  */
 export async function POST(req: Request) {
   const limited = await checkRateLimit(req, "salary", 5);
