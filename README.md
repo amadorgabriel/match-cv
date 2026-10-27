@@ -25,7 +25,7 @@ Por padrão só o **CV** vem marcado. E-mail, cover letter, entrevista e faixa s
 | Schemas | Zod 4 + `Output.object` |
 | Leitura do CV | `unpdf` (só PDF com texto) |
 | PDF | `@react-pdf/renderer` no navegador, com prévia em blob |
-| Salário | Adzuna (`/jobs/br/histogram`, cache de 1 dia) e busca nativa do provedor |
+| Salário | Busca nativa do provedor na web pública e link de referência do Glassdoor |
 | Telemetria | `@vercel/otel`, `@langfuse/otel` opcional e `@sentry/nextjs` opcional |
 | Testes | Vitest |
 | Hospedagem | Vercel |
@@ -119,10 +119,10 @@ Os prompts de CV, cover letter e e-mail incluem `src/prompts/anti-ai-rules.ts`. 
 ## Faixa salarial
 
 1. A descrição da vaga é normalizada (cargo, senioridade, empresa, local).
-2. A Adzuna é consultada em etapas. O histograma fica em cache por 1 dia quando há números e por menos tempo quando não há. As credenciais são lidas dentro da função cacheada e não entram na chave.
-3. Se o provedor tiver busca nativa, uma chamada com a ferramenta do modelo acrescenta só URLs que a ferramenta devolveu.
-4. Sem números, a rota responde 200 com "faixa não disponível". Não é erro.
-5. O link do Glassdoor aparece sempre. É uma busca por palavra-chave em `glassdoor.com.br` (`Salários/<termo>-salário-SRCH_KO0,N.htm`), com o cargo na frente da empresa. O app não raspa o Glassdoor e não busca o id interno da empresa.
+2. Com a IA ligada, se o provedor tiver busca nativa, uma chamada com a ferramenta do modelo estima a faixa e cita só URLs que a ferramenta devolveu.
+3. Sem números, a rota responde 200 com "faixa não disponível". Não é erro.
+4. O link do Glassdoor aparece sempre. É uma busca por palavra-chave em `glassdoor.com.br` (`Salários/<termo>-salário-SRCH_KO0,N.htm`), com o cargo na frente da empresa. O app não raspa o Glassdoor e não busca o id interno da empresa.
+5. Com `MATCHCV_ENABLE_AI` diferente de `true`, `/api/salary` devolve um exemplo e não consulta a web.
 
 ## Telemetria
 
@@ -134,7 +134,7 @@ A sessão vai no header `x-matchcv-session`. A tentativa vai em `x-matchcv-attem
 
 O Langfuse só é criado se `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` e `LANGFUSE_BASEURL` existirem. Sem as três, o exporter não sobe. Quando sobe, mascara padrões de chave e só exporta spans com o atributo `matchcv.artifact`.
 
-As chamadas de saída para Adzuna, OpenAI, Anthropic, Google, Together, OpenRouter e Sentry ficam de fora do tracing de `fetch`, para a URL com `app_key` e os headers de autorização não virarem span.
+As chamadas de saída para OpenAI, Anthropic, Google, Together, OpenRouter e Sentry ficam de fora do tracing de `fetch`, para os headers de autorização não virarem span.
 
 ## Sentry
 
@@ -179,24 +179,10 @@ No cliente, um botão temporário em qualquer componente com `"use client"`:
 
 No servidor, um `throw new Error("Sentry server test")` temporário dentro de um route handler. Erros já capturados pelas rotas de API aparecem com as tags de rota, artefato, provedor e modelo. Tire o código de teste antes de commitar. O evento deve chegar em **Issues** sem a chave, sem cookie e sem o texto do CV.
 
-## Como configurar a Adzuna
-
-1. Crie uma conta em https://developer.adzuna.com e registre um app.
-2. Preencha no `.env.local`:
-
-   ```
-   ADZUNA_APP_ID=seu_app_id
-   ADZUNA_APP_KEY=sua_app_key
-   ```
-
-3. Reinicie o `npm run dev`. Sem essas variáveis, e sem busca na web, `/api/salary` devolve um exemplo.
-
-As credenciais da Adzuna ficam no servidor. A tela mostra "Jobs by Adzuna" e o selo Jobsworth quando a fonte é a Adzuna. A chave gratuita é para avaliação. Uso comercial exige acordo com a Adzuna.
-
 ## Deploy na Vercel
 
 1. Importe o repositório em https://vercel.com/new.
-2. Cadastre `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` e, para IA real, `MATCHCV_ENABLE_AI=true`. Langfuse é opcional. O Sentry liga com `SENTRY_DSN` e `NEXT_PUBLIC_SENTRY_DSN` (já presentes na Vercel). `SENTRY_ORG` e `SENTRY_PROJECT` são opcionais: sem elas o build usa `amador-gabriel-rc` e `match-cv`. `SENTRY_AUTH_TOKEN` só entra se o build for enviar source maps.
+2. Para IA real, cadastre `MATCHCV_ENABLE_AI=true`. Langfuse é opcional. O Sentry liga com `SENTRY_DSN` e `NEXT_PUBLIC_SENTRY_DSN` (já presentes na Vercel). `SENTRY_ORG` e `SENTRY_PROJECT` são opcionais: sem elas o build usa `amador-gabriel-rc` e `match-cv`. `SENTRY_AUTH_TOKEN` só entra se o build for enviar source maps.
 3. Para o rate limit durável, crie o Redis Upstash no Marketplace e conecte a este projeto. O passo a passo está na seção seguinte. Sem essas variáveis o limite continua em memória.
 4. Use Node.js 24.
 

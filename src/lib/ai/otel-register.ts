@@ -64,7 +64,6 @@ export async function registerNodeTelemetry(): Promise<void> {
     instrumentationConfig: {
       fetch: {
         ignoreUrls: [
-          /api\.adzuna\.com/,
           /api\.openai\.com/,
           /api\.anthropic\.com/,
           /generativelanguage\.googleapis\.com/,

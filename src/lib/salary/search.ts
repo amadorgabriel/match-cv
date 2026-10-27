@@ -6,9 +6,9 @@ import { supportsNativeWebSearch } from "@/lib/ai/providers";
 import { mockSalary } from "@/lib/mock/outputs";
 import { SalarySchema, type Salary } from "@/lib/schemas/outputs";
 
-import { adzunaObservation, searchAdzuna } from "./adzuna";
 import { readSalaryCache, salaryCacheKey, writeSalaryCache } from "./cache";
 import { combineSalary, type SalaryObservation } from "./combine";
+import { glassdoorSalarySearchUrl } from "./glassdoor";
 import { analyzeJob } from "./job";
 import { searchWebSalary, WebSearchRateLimitError } from "./web";
 
@@ -34,7 +34,12 @@ export async function lookupSalary(input: {
   telemetry?: ModelCallContext;
 }): Promise<Salary> {
   const job = analyzeJob(input);
-  const webProvider = input.realAi && input.provider && input.model && input.apiKey && supportsNativeWebSearch(input.provider)
+  if (!input.realAi) {
+    const example = mockSalary(job.normalizedTitle, job.location);
+    return { ...example, query: { ...example.query, company: job.company } };
+  }
+
+  const webProvider = input.provider && input.model && input.apiKey && supportsNativeWebSearch(input.provider)
     ? input.provider
     : undefined;
   const cacheKey = salaryCacheKey([job.normalizedTitle, job.location, job.company, job.seniority, webProvider ?? "off", input.model]);
@@ -48,15 +53,13 @@ export async function lookupSalary(input: {
     }
   }
 
-  const adzuna = await searchAdzuna(job);
-  const tried = [...adzuna.tried];
+  const tried: string[] = [];
   const observations: SalaryObservation[] = [];
-  if (adzuna.match) observations.push(adzunaObservation(job, adzuna.match));
-
   let webSources: Salary["sources"] = [];
-  if (!input.realAi) {
-    tried.push("Busca na web desligada neste servidor.");
-  } else if (!input.provider || !input.model || !input.apiKey) {
+  const glassdoorUrl = glassdoorSalarySearchUrl({ company: job.company, jobTitle: job.normalizedTitle });
+  if (glassdoorUrl) tried.push("Link de referência do Glassdoor incluído.");
+
+  if (!input.provider || !input.model || !input.apiKey) {
     tried.push("Busca na web sem chave do usuário.");
   } else if (!supportsNativeWebSearch(input.provider)) {
     tried.push("Busca na web ignorada: este provedor não tem ferramenta de busca.");
@@ -80,18 +83,9 @@ export async function lookupSalary(input: {
         } else tried.push("Busca na web sem faixa numérica.");
       }
     } catch (error) {
-      if (error instanceof WebSearchRateLimitError && !adzuna.match) throw new SalaryRateLimitError(error.retryAfterSec);
-      if (error instanceof WebSearchRateLimitError) {
-        tried.push("Busca na web atingiu o limite do plano grátis. A faixa usa as outras fontes.");
-      } else {
-        tried.push("Busca na web indisponível.");
-      }
+      if (error instanceof WebSearchRateLimitError) throw new SalaryRateLimitError(error.retryAfterSec);
+      tried.push("Busca na web indisponível.");
     }
-  }
-
-  if (!adzuna.configured && !webProvider) {
-    const example = mockSalary(job.normalizedTitle, job.location);
-    return { ...example, query: { ...example.query, company: job.company } };
   }
 
   const salary = combineSalary(job, observations, tried, webSources);

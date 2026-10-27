@@ -13,7 +13,7 @@ describe("redactSecrets", () => {
       "sk-ant-api03-abcdefghijklmnopqrstuvwxyz",
       "sk-or-v1-abcdefghijklmnopqrstuvwxyz",
       "AIzaSyA1234567890abcdefghij",
-      "app_key=segredo-adzuna",
+      "app_key=segredo-aplicacao",
       "x-goog-api-key: AIzaSyOutraChave1234567890",
     ].join(" ");
     const clean = redactSecrets(text, [key]);
@@ -22,7 +22,7 @@ describe("redactSecrets", () => {
     expect(clean).not.toContain("sk-ant-");
     expect(clean).not.toContain("sk-or-");
     expect(clean).not.toContain("AIza");
-    expect(clean).not.toContain("segredo-adzuna");
+    expect(clean).not.toContain("segredo-aplicacao");
     expect(clean).toContain("[redacted]");
   });
 });

@@ -81,7 +81,7 @@ export const SalarySchema = z.object({
   min: z.number().optional(),
   median: z.number().optional(),
   max: z.number().optional(),
-  /** alta: duas ou mais fontes concordantes; media: uma boa; baixa: só a web. */
+  /** alta: duas ou mais fontes concordantes; media: uma fonte citada; baixa: números sem fonte. */
   confidence: z.enum(["alta", "media", "baixa"]).optional(),
   /** CLT, PJ, misto ou o que a fonte indicou. */
   contract: z.string().optional(),
