@@ -2,7 +2,8 @@ import "server-only";
 
 import type { ProviderId } from "@/lib/ai/catalog";
 import type { ModelCallContext } from "@/lib/ai/telemetry-context";
-import { supportsNativeWebSearch } from "@/lib/ai/providers";
+import type { WorkModel } from "@/lib/schemas/brief";
+import { supportsSalaryWebSearch } from "@/lib/ai/providers";
 import { mockSalary } from "@/lib/mock/outputs";
 import { SalarySchema, type Salary } from "@/lib/schemas/outputs";
 
@@ -24,7 +25,12 @@ export class SalaryRateLimitError extends Error {
 
 export async function lookupSalary(input: {
   jobTitle?: string;
+  normalizedSearchTitle?: string;
+  seniority?: string;
+  candidateSeniority?: string;
+  company?: string | null;
   location?: string;
+  workModel?: WorkModel;
   jobDescription?: string;
   provider?: ProviderId;
   model?: string;
@@ -39,7 +45,7 @@ export async function lookupSalary(input: {
     return { ...example, query: { ...example.query, company: job.company } };
   }
 
-  const webProvider = input.provider && input.model && input.apiKey && supportsNativeWebSearch(input.provider)
+  const webProvider = input.provider && input.model && input.apiKey && supportsSalaryWebSearch(input.provider)
     ? input.provider
     : undefined;
   const cacheKey = salaryCacheKey([job.normalizedTitle, job.location, job.company, job.seniority, webProvider ?? "off", input.model]);
@@ -61,7 +67,7 @@ export async function lookupSalary(input: {
 
   if (!input.provider || !input.model || !input.apiKey) {
     tried.push("Busca na web sem chave do usuário.");
-  } else if (!supportsNativeWebSearch(input.provider)) {
+  } else if (!supportsSalaryWebSearch(input.provider)) {
     tried.push("Busca na web ignorada: este provedor não tem ferramenta de busca.");
   } else {
     try {

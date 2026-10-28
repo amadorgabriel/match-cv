@@ -6,6 +6,7 @@ import { parseRetryAfterValue } from "@/lib/async/pool";
 import { cvPdfFilename } from "@/lib/pdf/filename";
 import type { Brief } from "@/lib/schemas/brief";
 import type { Artifact, ArtifactOutput, Cv, GenerateResponse, Salary } from "@/lib/schemas/outputs";
+import type { VerificationReport, VerifyRequest } from "@/lib/verification/types";
 
 /**
  * Chamadas do navegador para as rotas internas (mesma origem, HTTPS em produção).
@@ -138,12 +139,33 @@ export async function generate<A extends Artifact>(
 }
 
 export async function fetchSalary(
-  input: { jobDescription: string; provider: ProviderId; model: string; apiKey?: string; useSavedKey?: boolean },
+  input: {
+    jobDescription: string;
+    jobTitle?: string;
+    normalizedSearchTitle?: string;
+    seniority?: string;
+    candidateSeniority?: string;
+    company?: string;
+    location?: string;
+    workModel?: Brief["job"]["workModel"];
+    provider: ProviderId;
+    model: string;
+    apiKey?: string;
+    useSavedKey?: boolean;
+  },
   signal?: AbortSignal,
   attempt?: number,
 ): Promise<Salary> {
   try {
     return await handle(await postJson("/api/salary", input, signal, attempt));
+  } catch (error) {
+    throw errorFromFailedFetch(error, signal);
+  }
+}
+
+export async function fetchVerification(input: VerifyRequest, signal?: AbortSignal): Promise<VerificationReport> {
+  try {
+    return await handle(await postJson("/api/verify", input, signal));
   } catch (error) {
     throw errorFromFailedFetch(error, signal);
   }

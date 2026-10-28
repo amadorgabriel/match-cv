@@ -7,16 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   defaultSelectableProvider,
+  isFreeModel,
   isProviderId,
   isSelectableProvider,
+  modelTierLabel,
   PROVIDERS,
   selectableModels,
   selectableProviders,
+  type ModelOption,
   type ProviderId,
+  type ProviderOption,
 } from "@/lib/ai/catalog";
 import { validateKey } from "@/lib/client/api";
 import { clearStoredKey, parseStoredKey, readStoredKey, saveStoredKey, subscribeNoop } from "@/lib/client/key-storage";
@@ -31,9 +35,6 @@ import {
 
 import { SavedKeyControls } from "./saved-key-controls";
 import type { FormValues } from "./types";
-
-const VISIBLE_PROVIDERS = selectableProviders();
-const providerItems = Object.fromEntries(VISIBLE_PROVIDERS.map((provider) => [provider.id, provider.label]));
 
 const OUTPUT_OPTIONS: { id: OutputId; label: string }[] = [
   { id: "cv", label: "CV PDF" },
@@ -71,6 +72,7 @@ export function FormStep({ initial, onSubmit }: Props) {
   const [rememberInput, setRemember] = useState<boolean | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [useSaved, setUseSaved] = useState(Boolean(initial?.useSavedKey));
+  const [freeOnly, setFreeOnly] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [keyStatus, setKeyStatus] = useState<{ state: "idle" | "testing" | "ok" | "error"; message?: string }>({
     state: "idle",
@@ -78,23 +80,37 @@ export function FormStep({ initial, onSubmit }: Props) {
 
   const storedProvider =
     stored && isProviderId(stored.provider) && isSelectableProvider(stored.provider) ? stored.provider : null;
+  const visibleProviders = useMemo(() => selectableProviders({ freeOnly }), [freeOnly]);
   const requestedProvider = providerInput ?? storedProvider ?? initial?.provider ?? null;
   const provider: ProviderId =
-    requestedProvider && isProviderId(requestedProvider) && isSelectableProvider(requestedProvider)
+    requestedProvider &&
+    isProviderId(requestedProvider) &&
+    isSelectableProvider(requestedProvider) &&
+    visibleProviders.some((item) => item.id === requestedProvider)
       ? requestedProvider
       : defaultSelectableProvider();
   const providerInfo = PROVIDERS[provider];
-  const models = useMemo(() => selectableModels(providerInfo), [providerInfo]);
+  const models = useMemo(() => selectableModels(providerInfo, { freeOnly }), [providerInfo, freeOnly]);
   const storedModel = storedProvider === provider ? stored?.model : undefined;
   const requestedModel = modelInput ?? storedModel ?? providerInfo.defaultModel;
-  const model = models.some((item) => item.id === requestedModel) ? requestedModel : providerInfo.defaultModel;
+  const model = models.some((item) => item.id === requestedModel)
+    ? requestedModel
+    : (models.find((item) => item.id === providerInfo.defaultModel)?.id ?? models[0]?.id ?? providerInfo.defaultModel);
   const apiKey = (storedProvider ? apiKeyInput ?? stored?.apiKey : apiKeyInput) ?? "";
   const remember = rememberInput ?? storedProvider !== null;
 
+  const providerItems = useMemo(
+    () => Object.fromEntries(visibleProviders.map((item) => [item.id, providerMenuLabel(item, freeOnly)])),
+    [visibleProviders, freeOnly],
+  );
   const modelItems = useMemo(
-    () => Object.fromEntries(models.map((m) => [m.id, m.unverified ? `${m.label} (ID a confirmar)` : m.label])),
+    () => Object.fromEntries(models.map((item) => [item.id, modelMenuLabel(item)])),
     [models],
   );
+  const freeModels = models.filter((model) => isFreeModel(model));
+  const paidModels = models.filter((model) => !isFreeModel(model));
+  const freeProviders = visibleProviders.filter((item) => item.free);
+  const paidProviders = visibleProviders.filter((item) => !item.free);
 
   function changeProvider(next: ProviderId) {
     setProvider(next);
@@ -286,10 +302,24 @@ export function FormStep({ initial, onSubmit }: Props) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={freeOnly}
+              onChange={(event) => setFreeOnly(event.target.checked)}
+              className="accent-primary size-4"
+            />
+            Mostrar apenas gratuitos
+          </label>
+          <p className="text-muted-foreground text-xs">
+            O padrão é o Gemini gratuito. Modelos com badge Pago usam o plano do provedor.
+          </p>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label>Provedor</Label>
               <Select
+                key={freeOnly ? "providers-free" : "providers-all"}
                 value={provider}
                 items={providerItems}
                 onValueChange={(v) => {
@@ -297,29 +327,28 @@ export function FormStep({ initial, onSubmit }: Props) {
                 }}
               >
                 <SelectTrigger className="w-full" aria-label="Provedor de IA">
-                  <SelectValue />
+                  <SelectValue>{providerItems[provider]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {VISIBLE_PROVIDERS.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
+                  <ModelGroup label="Com modelo gratuito" items={freeProviders} freeOnly={freeOnly} />
+                  <ModelGroup label="Somente plano pago" items={paidProviders} freeOnly={freeOnly} />
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-2">
               <Label>Modelo</Label>
-              <Select value={model} items={modelItems} onValueChange={(v) => typeof v === "string" && setModel(v)}>
+              <Select
+                key={freeOnly ? "models-free" : "models-all"}
+                value={model}
+                items={modelItems}
+                onValueChange={(v) => typeof v === "string" && setModel(v)}
+              >
                 <SelectTrigger className="w-full" aria-label="Modelo">
-                  <SelectValue />
+                  <SelectValue>{modelItems[model]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {models.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {modelItems[m.id]}
-                    </SelectItem>
-                  ))}
+                  <OptionGroup label="Gratuitos" models={freeModels} />
+                  <OptionGroup label="Pagos" models={paidModels} />
                 </SelectContent>
               </Select>
             </div>
@@ -424,5 +453,65 @@ export function FormStep({ initial, onSubmit }: Props) {
         Gerar tudo
       </Button>
     </form>
+  );
+}
+
+function providerMenuLabel(provider: ProviderOption, freeOnly: boolean): string {
+  const tiers = [...new Set(selectableModels(provider, { freeOnly }).map((model) => modelTierLabel(model)))];
+  return `${provider.label} · ${tiers.join(" e ")}`;
+}
+
+function modelMenuLabel(model: ModelOption): string {
+  const unverified = model.unverified ? " (ID a confirmar)" : "";
+  return `${model.label}${unverified} · ${modelTierLabel(model)}`;
+}
+
+function TierBadge({ free }: { free: boolean }) {
+  return (
+    <span
+      className={
+        free
+          ? "rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+          : "rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+      }
+    >
+      {free ? "Gratuito" : "Pago"}
+    </span>
+  );
+}
+
+function ModelGroup({ label, items, freeOnly }: { label: string; items: ProviderOption[]; freeOnly: boolean }) {
+  if (items.length === 0) return null;
+  return (
+    <SelectGroup>
+      <SelectLabel>{label}</SelectLabel>
+      {items.map((item) => {
+        const models = selectableModels(item, { freeOnly });
+        const hasFree = models.some((model) => isFreeModel(model));
+        const hasPaid = models.some((model) => !isFreeModel(model));
+        return (
+          <SelectItem key={item.id} value={item.id}>
+            {item.label}
+            {hasFree ? <TierBadge free /> : null}
+            {hasPaid ? <TierBadge free={false} /> : null}
+          </SelectItem>
+        );
+      })}
+    </SelectGroup>
+  );
+}
+
+function OptionGroup({ label, models }: { label: string; models: ModelOption[] }) {
+  if (models.length === 0) return null;
+  return (
+    <SelectGroup>
+      <SelectLabel>{label}</SelectLabel>
+      {models.map((item) => (
+        <SelectItem key={item.id} value={item.id}>
+          {item.unverified ? `${item.label} (ID a confirmar)` : item.label}
+          <TierBadge free={isFreeModel(item)} />
+        </SelectItem>
+      ))}
+    </SelectGroup>
   );
 }

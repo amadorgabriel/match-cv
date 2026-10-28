@@ -53,7 +53,7 @@ describe("tamanho dos prompts", () => {
       interview: tokens(INTERVIEW_SYSTEM) + tokens(buildInterviewPrompt({ ...input, brief: MOCK_BRIEF })),
     };
     expect(full).toEqual({ cv: 3289, email: 3200, cover: 3205, interview: 2517, web: 797 });
-    expect(briefed).toEqual({ brief: 2405, cv: 3289, email: 1257, cover: 1262, interview: 574 });
+    expect(briefed).toEqual({ brief: 2654, cv: 3289, email: 1304, cover: 1309, interview: 621 });
     expect(briefed.brief + briefed.cv + briefed.email + briefed.cover + briefed.interview).toBeLessThan(
       full.cv + full.email + full.cover + full.interview,
     );

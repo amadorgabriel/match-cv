@@ -4,6 +4,9 @@
  * Este arquivo é seguro para o cliente: não tem segredos nem baseURLs.
  * Os IDs de modelo mudam rápido. Confirme cada um via endpoint `/models`
  * do provedor e teste structured output antes de manter na lista.
+ *
+ * O padrão inicial continua gratuito: Google / gemini-3.8-flash.
+ * Modelos pagos ficam visíveis, com badge, e podem ser escondidos no seletor.
  */
 
 export const PROVIDER_IDS = [
@@ -16,16 +19,16 @@ export const PROVIDER_IDS = [
 
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
+export type ModelTier = "free" | "paid";
+
 export interface ModelOption {
   id: string;
   label: string;
+  tier: ModelTier;
+  /** true quando a chamada cabe num plano gratuito do provedor. */
+  free: boolean;
   /** true quando o ID ainda não foi confirmado no `/models` do provedor */
   unverified?: boolean;
-  /**
-   * Modelo só do plano pago. O seletor não o oferece.
-   * O caminho no servidor continua aceitando o ID.
-   */
-  paidOnly?: boolean;
 }
 
 export interface ProviderOption {
@@ -37,118 +40,113 @@ export interface ProviderOption {
   defaultModel: string;
   models: ModelOption[];
   /**
-   * true quando uma chave gratuita (sem faturamento obrigatório) consegue
-   * chamar os modelos listados. Conferido na documentação oficial em 2026-10-21.
+   * true quando o provedor oferece pelo menos um modelo gratuito
+   * sem faturamento obrigatório. Os modelos pagos do mesmo provedor
+   * continuam na lista, cada um com `tier: "paid"`.
    */
   free: boolean;
 }
 
 /**
- * Enquanto true, o seletor mostra só modelos com custo zero e provedores
- * que têm pelo menos um. Os pagos ficam em `paidOnly` e o buildModel segue
- * aceitando os cinco provedores.
- *
- * Conferido em 2026-10-21:
- * - Google: cota grátis em Flash/Flash-Lite
- *   (https://ai.google.dev/gemini-api/docs/pricing).
- * - OpenRouter: sufixo `:free` e `openrouter/free` a US$ 0
- *   (https://openrouter.ai/docs/guides/routing/model-variants/free).
- * - OpenAI: a linha Free da tabela de limites é teto de gasto, não crédito.
- *   O preço mais baixo da tabela é pago
- *   (https://developers.openai.com/api/docs/guides/rate-limits,
- *   https://developers.openai.com/api/docs/pricing).
- * - Anthropic: todo modelo da tabela tem preço. Há um crédito inicial
- *   pequeno e não publicado, não um modelo gratuito
- *   (https://platform.claude.com/docs/en/about-claude/pricing).
- * - Together: `Prism-ML/Ternary-Bonsai-27B` custa US$ 0 por token, mas a
- *   plataforma não tem trial e a primeira compra mínima é US$ 15
- *   (https://docs.together.ai/docs/serverless/models,
- *   https://docs.together.ai/docs/billing-credits). Sem chave gratuita.
+ * Quando true, o seletor esconde provedores e modelos pagos.
+ * O padrão é false: pagos e gratuitos aparecem, e a UI filtra sob demanda.
  */
-export const FREE_TIER_ONLY = true;
+export const FREE_TIER_ONLY = false;
+
+function freeModel(id: string, label: string, unverified?: boolean): ModelOption {
+  return { id, label, tier: "free", free: true, unverified };
+}
+
+function paidModel(id: string, label: string, unverified?: boolean): ModelOption {
+  return { id, label, tier: "paid", free: false, unverified };
+}
 
 export const PROVIDERS: Record<ProviderId, ProviderOption> = {
   openai: {
     id: "openai",
     label: "OpenAI",
-    description: "Modelos GPT da OpenAI",
+    description: "Modelos GPT pagos da OpenAI",
     keyHint: "sk-...",
     keyDocsUrl: "https://platform.openai.com/api-keys",
     defaultModel: "gpt-6.1-sol",
     free: false,
     models: [
-      { id: "gpt-6.1-sol", label: "GPT-6.1 Sol (recomendado)", paidOnly: true },
-      { id: "gpt-6-astra", label: "GPT-6 Astra (premium)", paidOnly: true },
+      paidModel("gpt-6.1-sol", "GPT-6.1 Sol (recomendado)"),
+      paidModel("gpt-6-astra", "GPT-6 Astra (premium)"),
     ],
   },
   anthropic: {
     id: "anthropic",
     label: "Anthropic",
-    description: "Modelos Claude da Anthropic",
+    description: "Modelos Claude pagos da Anthropic",
     keyHint: "sk-ant-...",
     keyDocsUrl: "https://console.anthropic.com/settings/keys",
     defaultModel: "claude-sonnet-5-5",
     free: false,
     models: [
-      { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 (recomendado)", paidOnly: true },
-      { id: "claude-opus-5-5", label: "Claude Opus 5.5 (premium)", paidOnly: true },
+      paidModel("claude-sonnet-5-5", "Claude Sonnet 5.5 (recomendado)"),
+      paidModel("claude-opus-5-5", "Claude Opus 5.5 (premium)"),
     ],
   },
   google: {
     id: "google",
     label: "Google Gemini",
-    description: "Gemini no plano gratuito do Google AI Studio",
+    description: "Gemini gratuito no AI Studio e modelos premium",
     keyHint: "AIza...",
     keyDocsUrl: "https://aistudio.google.com/apikey",
     defaultModel: "gemini-3.8-flash",
     free: true,
     models: [
-      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (recomendado)" },
-      { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash (grátis)" },
-      { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite (grátis)" },
-      { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite (grátis)" },
+      freeModel("gemini-3.8-flash", "Gemini 3.8 Flash (recomendado)"),
+      freeModel("gemini-3.6-flash", "Gemini 3.6 Flash"),
+      freeModel("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite"),
+      freeModel("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite"),
+      paidModel("gemini-4-argon", "Gemini 4 Argon (premium)"),
     ],
   },
   together: {
     id: "together",
     label: "Open source via Together AI",
-    description: "Qwen 3 e outros modelos abertos hospedados na Together",
+    description: "Qwen e outros modelos abertos hospedados na Together",
     keyHint: "chave da Together",
     keyDocsUrl: "https://api.together.ai/settings/api-keys",
     defaultModel: "Qwen/Qwen3.8-2.4T-A95B",
     free: false,
     models: [
-      { id: "Qwen/Qwen3.8-2.4T-A95B", label: "Qwen3.8 2.4T A95B", paidOnly: true },
-      { id: "zai-org/GLM-5", label: "GLM-5", unverified: true, paidOnly: true },
+      paidModel("Qwen/Qwen3.8-2.4T-A95B", "Qwen3.8 2.4T A95B"),
+      paidModel("zai-org/GLM-5", "GLM-5", true),
     ],
   },
   openrouter: {
     id: "openrouter",
-    label: "OpenRouter (modelos gratuitos)",
-    description: "Variantes :free e o roteador openrouter/free, a US$ 0",
+    label: "OpenRouter",
+    description: "Modelos gratuitos (:free) e modelos pagos no mesmo roteador",
     keyHint: "sk-or-...",
     keyDocsUrl: "https://openrouter.ai/settings/keys",
     defaultModel: "openrouter/free",
     free: true,
     models: [
-      { id: "openrouter/free", label: "Roteador de modelos gratuitos (recomendado)" },
-      { id: "cohere/north-mini-code:free", label: "Cohere North Mini Code (grátis)" },
-      { id: "dots-studio/dots-3-note-preview:free", label: "Dots3-Note Preview (grátis)" },
-      { id: "google/gemma-4-26b-a4b-it:free", label: "Gemma 4 26B (grátis)" },
-      { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B (grátis)" },
-      { id: "liquid/lfm-2.5-2.6b:free", label: "LFM2.5 2.6B (grátis)" },
-      { id: "minimax/minimax-m3.1-flash:free", label: "MiniMax M3.1 Flash (grátis)" },
-      { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", label: "Nemotron 3 Nano Omni (grátis)" },
-      { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super (grátis)" },
-      { id: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra (grátis)" },
-      { id: "nvidia/nemotron-3.5-content-safety:free", label: "Nemotron 3.5 Content Safety (grátis)" },
-      { id: "nvidia/nemotron-3.5-lightning:free", label: "Nemotron 3.5 Lightning (grátis)" },
-      { id: "nvidia/nemotron-3.5-super-vl:free", label: "Nemotron 3.5 Super VL (grátis)" },
-      { id: "poolside/laguna-s-2.1:free", label: "Laguna S 2.1 (grátis)" },
-      { id: "poolside/laguna-xs-2.1:free", label: "Laguna XS 2.1 (grátis)" },
-      { id: "thinkingmachines/inkling-small:free", label: "Inkling Small (grátis)" },
-      { id: "thinkingmachines/inkling:free", label: "Inkling (grátis)" },
-      { id: "xingchen-agi/xing4.0-29b-a4b:free", label: "Xing4.0 29B (grátis)" },
+      freeModel("openrouter/free", "Roteador de modelos gratuitos (recomendado)"),
+      freeModel("cohere/north-mini-code:free", "Cohere North Mini Code"),
+      freeModel("dots-studio/dots-3-note-preview:free", "Dots3-Note Preview"),
+      freeModel("google/gemma-4-26b-a4b-it:free", "Gemma 4 26B"),
+      freeModel("google/gemma-4-31b-it:free", "Gemma 4 31B"),
+      freeModel("liquid/lfm-2.5-2.6b:free", "LFM2.5 2.6B"),
+      freeModel("minimax/minimax-m3.1-flash:free", "MiniMax M3.1 Flash"),
+      freeModel("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "Nemotron 3 Nano Omni"),
+      freeModel("nvidia/nemotron-3-super-120b-a12b:free", "Nemotron 3 Super"),
+      freeModel("nvidia/nemotron-3-ultra-550b-a55b:free", "Nemotron 3 Ultra"),
+      freeModel("nvidia/nemotron-3.5-content-safety:free", "Nemotron 3.5 Content Safety"),
+      freeModel("nvidia/nemotron-3.5-lightning:free", "Nemotron 3.5 Lightning"),
+      freeModel("nvidia/nemotron-3.5-super-vl:free", "Nemotron 3.5 Super VL"),
+      freeModel("poolside/laguna-s-2.1:free", "Laguna S 2.1"),
+      freeModel("poolside/laguna-xs-2.1:free", "Laguna XS 2.1"),
+      freeModel("thinkingmachines/inkling-small:free", "Inkling Small"),
+      freeModel("thinkingmachines/inkling:free", "Inkling"),
+      freeModel("xingchen-agi/xing4.0-29b-a4b:free", "Xing4.0 29B"),
+      paidModel("google/gemini-4-argon", "Gemini 4 Argon (premium)", true),
+      paidModel("openai/gpt-6.1-sol", "GPT-6.1 Sol (premium)", true),
+      paidModel("anthropic/claude-sonnet-5-5", "Claude Sonnet 5.5 (premium)", true),
     ],
   },
 };
@@ -157,11 +155,19 @@ export function isProviderId(value: unknown): value is ProviderId {
   return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
 }
 
+export function isFreeModel(model: ModelOption): boolean {
+  return model.free && model.tier === "free";
+}
+
+export function modelTierLabel(model: ModelOption): "Gratuito" | "Pago" {
+  return isFreeModel(model) ? "Gratuito" : "Pago";
+}
+
 /** Provedores que o seletor pode mostrar. Com FREE_TIER_ONLY, só quem tem modelo grátis. */
-export function selectableProviders(): ProviderOption[] {
+export function selectableProviders(options?: { freeOnly?: boolean }): ProviderOption[] {
   return PROVIDER_IDS.map((id) => PROVIDERS[id]).filter((provider) => {
     if (FREE_TIER_ONLY && !provider.free) return false;
-    return selectableModels(provider).length > 0;
+    return selectableModels(provider, options).length > 0;
   });
 }
 
@@ -169,14 +175,18 @@ export function isSelectableProvider(id: ProviderId): boolean {
   return !FREE_TIER_ONLY || PROVIDERS[id].free;
 }
 
-/** Primeiro provedor visível. Com o seletor gratuito, é o Google Gemini. */
+/** Primeiro provedor sugerido. Continua sendo o Google, com modelo gratuito. */
 export function defaultSelectableProvider(): ProviderId {
-  return selectableProviders()[0]?.id ?? "google";
+  const providers = selectableProviders();
+  if (providers.some((provider) => provider.id === "google")) return "google";
+  return providers[0]?.id ?? "google";
 }
 
-/** Modelos que o seletor pode escolher. Os pagos ficam de fora. */
-export function selectableModels(provider: ProviderOption): ModelOption[] {
-  return provider.models.filter((model) => !model.paidOnly);
+/** Modelos que o seletor pode escolher. `freeOnly` esconde os pagos. */
+export function selectableModels(provider: ProviderOption, options?: { freeOnly?: boolean }): ModelOption[] {
+  const visible = FREE_TIER_ONLY ? provider.models.filter((model) => isFreeModel(model)) : provider.models;
+  if (!options?.freeOnly) return visible;
+  return visible.filter((model) => isFreeModel(model));
 }
 
 /** Formato aceito para IDs de modelo (evita injeção em URL/headers). */

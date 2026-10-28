@@ -6,14 +6,22 @@ const SECRET_PATTERNS = [
   /sk-(?:ant-|or-)?[A-Za-z0-9_-]{8,}/g,
   /AIza[0-9A-Za-z_-]{10,}/g,
   /Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
-  /(?:api[_-]?key|app[_-]?key|x-api-key|x-goog-api-key|authorization)\s*[=:]\s*["']?[^\s"'&,}]+/gi,
+  /(?:api[_-]?key|app[_-]?key|x-api-key|x-goog-api-key|authorization|typesafe[_-]?api[_-]?key)\s*[=:]\s*["']?[^\s"'&,}]+/gi,
   /postgres(?:ql)?:\/\/[^\s"'<>]+/gi,
   /(?:KEY_ENCRYPTION_SECRET(?:_PREVIOUS|_V\d+)?|BETTER_AUTH_SECRET|DATABASE_URL)\s*[=:]\s*["']?[^\s"'&,}]+/gi,
 ];
 
+/** Segredos do servidor. Acesso dinâmico para a chave não entrar no bundle do browser. */
+function configuredSecrets(): string[] {
+  const typesafe = process.env["TYPESAFE_API_KEY"];
+  return typesafe && typesafe.length >= 6 ? [typesafe] : [];
+}
+
 export function redactSecrets(text: string, secrets: Array<string | undefined> = []): string {
   let out = text;
-  const unique = [...new Set(secrets.filter((secret): secret is string => !!secret && secret.length >= 6))];
+  const unique = [
+    ...new Set([...secrets, ...configuredSecrets()].filter((secret): secret is string => !!secret && secret.length >= 6)),
+  ];
   unique.sort((a, b) => b.length - a.length);
   for (const secret of unique) out = out.split(secret).join("[redacted]");
   for (const pattern of SECRET_PATTERNS) {

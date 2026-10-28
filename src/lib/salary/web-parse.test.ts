@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseWebSalaryText } from "./web-parse";
+import { parseWebSalaryText, readLooseCitations } from "./web-parse";
 
 describe("parseWebSalaryText", () => {
   it("lê o JSON, cita a URL e marca remuneração total da Levels.fyi", () => {
@@ -47,5 +47,23 @@ describe("parseWebSalaryText", () => {
       ["https://www.linkedin.com/jobs/view/123"],
     );
     expect(hit?.sources).toEqual([{ name: "linkedin.com", url: "https://www.linkedin.com/jobs/view/123", date: undefined }]);
+  });
+
+  it("mantém a faixa quando o modelo não devolve citação estruturada", () => {
+    const hit = parseWebSalaryText(
+      JSON.stringify({ found: true, currency: "BRL", period: "month", min: 8000, max: 12000, exactMatch: true, roleFound: "analista" }),
+      [],
+    );
+    expect(hit?.found).toBe(true);
+    expect(hit?.observation?.min).toBe(8000);
+    expect(hit?.observation?.max).toBe(12000);
+    expect(hit?.sources).toEqual([]);
+  });
+
+  it("lê a citação solta do OpenRouter quando não há sources", () => {
+    const cited = readLooseCitations({
+      annotations: [{ type: "url_citation", url_citation: { url: "https://www.glassdoor.com.br/Salario/exemplo", title: "Glassdoor" } }],
+    });
+    expect(cited).toEqual([{ url: "https://www.glassdoor.com.br/Salario/exemplo", title: "Glassdoor" }]);
   });
 });

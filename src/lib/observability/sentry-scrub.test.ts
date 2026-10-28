@@ -210,4 +210,13 @@ describe("scrubAttributes", () => {
     expect(clean["matchcv.provider"]).toBe("google");
     expect(String(clean.note)).not.toContain("sk-");
   });
+
+  it("remove TYPESAFE_API_KEY do evento", () => {
+    const secret = "ts_live_VERIFICATION_SECRET_99";
+    const clean = scrubSentryEvent({
+      message: `jev falhou com ${secret}`,
+      extra: { TYPESAFE_API_KEY: secret, ok: true },
+    });
+    expect(JSON.stringify(clean)).not.toContain(secret);
+  });
 });

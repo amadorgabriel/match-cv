@@ -34,7 +34,7 @@ describe("estado por etapa", () => {
 
     steps = reduceStep(steps, { type: "done", id: "parse" });
     steps = reduceStep(steps, { type: "start", id: "brief" });
-    expect(activeStageMessages(steps)).toEqual(["Analisando a vaga…"]);
+    expect(activeStageMessages(steps)).toEqual(["Extraindo perfil e vaga…"]);
     expect(steps.find((step) => step.id === "cv")?.status).toBe("pending");
   });
 
@@ -43,7 +43,7 @@ describe("estado por etapa", () => {
       { type: "start", id: "brief" },
       { type: "start", id: "cv" },
     ]);
-    expect(activeStageMessages(steps)).toEqual(["Analisando a vaga…", "Gerando o CV…"]);
+    expect(activeStageMessages(steps)).toEqual(["Extraindo perfil e vaga…", "Gerando o CV…"]);
   });
 
   it("troca a mensagem para a espera do retry automático", () => {
@@ -126,7 +126,7 @@ describe("estado por etapa", () => {
       { type: "error", id: "email", error: "falhou" },
     ]);
     expect(canViewPartialResults(ready)).toBe(true);
-    expect(liveAnnouncement(ready)).toContain("Analisar a vaga: erro. análise indisponível");
+    expect(liveAnnouncement(ready)).toContain("Extrair perfil e vaga: erro. análise indisponível");
     expect(liveAnnouncement(ready)).toContain("Gerar o CV ATS: concluído.");
     expect(liveAnnouncement(ready)).not.toContain("pendente");
   });

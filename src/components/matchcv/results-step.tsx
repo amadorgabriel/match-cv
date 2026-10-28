@@ -16,17 +16,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Results } from "@/lib/client/api";
+import type { Brief } from "@/lib/schemas/brief";
 import type { Artifact, Salary, ValidationReport } from "@/lib/schemas/outputs";
 import { glassdoorSalaryLinkLabel, glassdoorSalarySearchUrl } from "@/lib/salary/glassdoor";
 import { analyzeJob } from "@/lib/salary/job";
+import type { VerificationReport } from "@/lib/verification/types";
 import { CopyButton } from "./copy-button";
 import { SaveApplicationButton } from "./save-application-button";
 import { CoverLetterPdf } from "./cover-letter-pdf";
 import { CvPdfPreview } from "./cv-pdf-preview";
 import type { StepId, StepState } from "./types";
+import { VerificationPanel } from "./verification-panel";
 
 interface Props {
   results: Results;
+  brief: Brief | null;
+  verification: VerificationReport | null;
+  verificationState: "idle" | "loading" | "ready" | "error";
   jobDescription: string;
   steps: StepState[];
   isMock: boolean;
@@ -221,9 +227,30 @@ function SalaryCard({ salary }: { salary: Salary }) {
   );
 }
 
-export function ResultsStep({ results, jobDescription, steps, isMock, regenerating, onRegenerate, onEdit, onReset }: Props) {
+export function ResultsStep({
+  results,
+  brief,
+  verification,
+  verificationState,
+  jobDescription,
+  steps,
+  isMock,
+  regenerating,
+  onRegenerate,
+  onEdit,
+  onReset,
+}: Props) {
   const cv = results.cv?.data;
-  const company = analyzeJob({ jobDescription }).company;
+  const company = analyzeJob({
+    company: brief?.job.company,
+    location: brief?.job.location,
+    jobTitle: brief?.job.title,
+    normalizedSearchTitle: brief?.job.normalizedSearchTitle,
+    seniority: brief?.job.seniority,
+    workModel: brief?.job.workModel,
+    jobDescription,
+  }).company;
+  const fullName = cv?.fullName || brief?.profile.fullName;
   const missing = (id: Artifact | "salary") => (
     <NotGenerated id={id} steps={steps} regenerating={regenerating} onGenerate={() => onRegenerate(id)} />
   );
@@ -245,6 +272,8 @@ export function ResultsStep({ results, jobDescription, steps, isMock, regenerati
           </Button>
         </div>
       </div>
+
+      <VerificationPanel report={verification} state={verificationState} />
 
       {isMock && (
         <div className="rounded-lg border border-sky-300 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
@@ -343,7 +372,7 @@ export function ResultsStep({ results, jobDescription, steps, isMock, regenerati
                 <>
                   <StepError steps={steps} id="cover-letter" />
                   <Paragraphs text={results["cover-letter"].data.body} />
-                  <CoverLetterPdf body={results["cover-letter"].data.body} fullName={cv?.fullName} company={company} />
+                  <CoverLetterPdf body={results["cover-letter"].data.body} fullName={fullName} company={company} />
                   <ValidationNotice report={results["cover-letter"].validation} />
                 </>
               ) : (
