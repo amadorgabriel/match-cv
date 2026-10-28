@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SavedMaterials } from "@/components/matchcv/saved-materials";
 import { listApplications, removeApplication, updateApplication, DATA_CLEARED_EVENT } from "@/lib/applications/browser";
+import { ACCOUNT_CHANGED_EVENT } from "@/lib/auth/account-state";
 import { filterApplications } from "@/lib/applications/store";
 import { APPLICATION_STATUSES, STATUS_LABEL, type ApplicationStatus, type JobApplication } from "@/lib/applications/types";
 
@@ -43,9 +44,11 @@ export function ApplicationsDashboard() {
       void reload();
     };
     window.addEventListener(DATA_CLEARED_EVENT, onClear);
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, onClear);
     return () => {
       cancelled = true;
       window.removeEventListener(DATA_CLEARED_EVENT, onClear);
+      window.removeEventListener(ACCOUNT_CHANGED_EVENT, onClear);
     };
   }, []);
 
@@ -99,7 +102,7 @@ export function ApplicationsDashboard() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Candidaturas</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Empresa, vaga, data e status. Sem login, a lista fica neste navegador. Com conta e banco, ela fica na sua conta.
+          Empresa, vaga, data e status. Sem login, a lista fica neste navegador. Com a sessão local, ela fica ligada à sua conta neste navegador. Com banco, ela fica no servidor.
         </p>
       </div>
 

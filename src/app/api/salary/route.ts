@@ -1,6 +1,7 @@
 import { isRealAiEnabled } from "@/lib/ai/flags";
 import { readModelCallContext } from "@/lib/ai/telemetry-context";
 import { providerRateLimitMessage } from "@/lib/ai/provider-error";
+import { parseSeniority } from "@/lib/salary/job";
 import { lookupSalary, SalaryRateLimitError } from "@/lib/salary/search";
 import type { Salary } from "@/lib/schemas/outputs";
 import { resolveRequestApiKey } from "@/lib/keys/resolve-saved-key";
@@ -37,11 +38,12 @@ export async function POST(req: Request) {
   const limited = await checkRateLimit(req, "salary", 5);
   if (limited) return limited;
 
-  const parsed = await readJson(req, SalaryRequestSchema, 40_000);
+  const parsed = await readJson(req, SalaryRequestSchema, 120_000);
   if (!parsed.ok) return parsed.response;
   const resolved = await resolveRequestApiKey(req, { ...parsed.data, allowMissing: !parsed.data.useSavedKey });
   if (!resolved.ok) return resolved.response;
-  const input = { ...parsed.data, apiKey: resolved.apiKey };
+  const fromDocuments = parsed.data.candidateSeniority ? undefined : parseSeniority(`${parsed.data.cvText ?? ""}\n${parsed.data.achievementsText ?? ""}`);
+  const input = { ...parsed.data, candidateSeniority: parsed.data.candidateSeniority ?? fromDocuments, apiKey: resolved.apiKey };
 
   const started = Date.now();
   try {

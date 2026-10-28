@@ -8,7 +8,7 @@ const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const DEK_BYTES = 32;
 
-export type EnvelopePurpose = "data" | "vault";
+export type EnvelopePurpose = "data" | "vault" | "session";
 
 export interface WrappedDek {
   iv: string;
@@ -66,7 +66,8 @@ export function resolveKekSecret(version: number, env: NodeJS.ProcessEnv = proce
 }
 
 function deriveKek(secret: string, version: number, purpose: EnvelopePurpose): Buffer {
-  const info = purpose === "vault" ? "matchcv-cookie-vault" : "matchcv-envelope-kek";
+  const info =
+    purpose === "vault" ? "matchcv-cookie-vault" : purpose === "session" ? "matchcv-local-session" : "matchcv-envelope-kek";
   return Buffer.from(hkdfSync("sha256", Buffer.from(secret, "utf8"), Buffer.from(`matchcv-kek-salt-v${version}`), Buffer.from(info), 32));
 }
 

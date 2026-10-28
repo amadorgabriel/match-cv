@@ -90,10 +90,14 @@ export interface ParseResult {
   truncated: boolean;
 }
 
-export async function parseResume(file: File, signal?: AbortSignal): Promise<ParseResult> {
+export async function extractPdf(file: File, signal?: AbortSignal): Promise<ParseResult> {
   const form = new FormData();
   form.append("file", file);
-  return handle(await fetch("/api/parse", { method: "POST", body: form, signal }));
+  return handle(await fetch("/api/extract-pdf", { method: "POST", body: form, signal }));
+}
+
+export async function parseResume(file: File, signal?: AbortSignal): Promise<ParseResult> {
+  return extractPdf(file, signal);
 }
 
 export async function validateKey(provider: ProviderId, apiKey: string) {
@@ -112,6 +116,10 @@ export interface GeneratePayload {
   achievements: string;
   /** Texto do PDF opcional de conquistas. String vazia quando não houver arquivo. */
   achievementsDocument: string;
+  /** Mesmo conteúdo de resumeText, para o salário e para compatibilidade dos nomes. */
+  cvText?: string;
+  /** Conquistas e contexto extra já compostos. */
+  achievementsText?: string;
   /** Perfil e vaga extraídos neste fluxo. Só existe em memória. */
   brief?: Brief;
 }
@@ -152,6 +160,8 @@ export async function fetchSalary(
     model: string;
     apiKey?: string;
     useSavedKey?: boolean;
+    cvText?: string;
+    achievementsText?: string;
   },
   signal?: AbortSignal,
   attempt?: number,

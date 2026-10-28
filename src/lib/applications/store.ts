@@ -169,34 +169,65 @@ export function createMemoryApplicationRepository(initial: JobApplication[] = []
   };
 }
 
-const LOCAL_KEY = "matchcv:applications";
+export const ANONYMOUS_APPLICATIONS_KEY = "matchcv:applications";
 
-/** Candidaturas do modo anônimo. A API key nunca entra neste storage. */
-export function createLocalApplicationRepository(storage: KeyValueStorage, key = LOCAL_KEY): ApplicationRepository {
+/** Chave do navegador. Sem usuário, o balde anônimo. Com sessão local, um balde por conta. */
+export function applicationStorageKey(userId: string | null): string {
+  return userId ? `${ANONYMOUS_APPLICATIONS_KEY}:${userId}` : ANONYMOUS_APPLICATIONS_KEY;
+}
+
+export function isApplicationStorageKey(key: string): boolean {
+  return key === ANONYMOUS_APPLICATIONS_KEY || key.startsWith(`${ANONYMOUS_APPLICATIONS_KEY}:`);
+}
+
+export interface PersistenceAccount {
+  authenticated?: boolean;
+  database?: boolean;
+  sessionKind?: string;
+  user?: { id?: string | null } | null;
+}
+
+/** Postgres só com Better Auth. Sessão local usa o balde do navegador daquela conta. */
+export function persistenceTarget(account: PersistenceAccount): { mode: "local" | "remote" | "account"; userId: string | null } {
+  const userId = account.user?.id || null;
+  if (account.authenticated && userId && account.database && account.sessionKind === "better-auth") {
+    return { mode: "remote", userId };
+  }
+  if (account.authenticated && userId) return { mode: "account", userId };
+  return { mode: "local", userId: null };
+}
+
+/** Candidaturas deste navegador. A API key nunca entra neste storage. */
+export function createLocalApplicationRepository(
+  storage: KeyValueStorage,
+  key = ANONYMOUS_APPLICATIONS_KEY,
+  ownerId: string | null = null,
+): ApplicationRepository {
   const memory = createMemoryApplicationRepository(readRows(storage, key));
+  const scope = (userId: string | null) => ownerId ?? userId;
   const persist = async () => {
-    storage.setItem(key, JSON.stringify(await memory.list(null)));
+    storage.setItem(key, JSON.stringify(await memory.list(ownerId)));
   };
   return {
-    list: (userId) => memory.list(userId),
-    get: (userId, id) => memory.get(userId, id),
+    list: (userId) => memory.list(scope(userId)),
+    get: (userId, id) => memory.get(scope(userId), id),
     async create(userId, input) {
-      const row = await memory.create(userId, input);
+      const row = await memory.create(scope(userId), input);
       await persist();
       return row;
     },
     async update(userId, id, patch) {
-      const row = await memory.update(userId, id, patch);
+      const row = await memory.update(scope(userId), id, patch);
       await persist();
       return row;
     },
     async delete(userId, id) {
-      const removed = await memory.delete(userId, id);
+      const removed = await memory.delete(scope(userId), id);
       await persist();
       return removed;
     },
     async deleteAll(userId) {
-      const count = await memory.deleteAll(userId);
+      const count = await memory.deleteAll(scope(userId));
       storage.removeItem(key);
       return count;
     },
