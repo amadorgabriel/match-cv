@@ -5,7 +5,9 @@ import { isProviderTimeout, PROVIDER_SLOW_MESSAGE, withGenerationDeadline } from
 import { providerRateLimitMessage, readProviderHttpFailure } from "@/lib/ai/provider-error";
 import { ProviderConfigError } from "@/lib/ai/providers";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
-import { GENERATE_REQUEST_MAX_BYTES, GenerateRequestSchema } from "@/lib/schemas/requests";
+import { resolveRequestApiKey } from "@/lib/keys/resolve-saved-key";
+import { GENERATE_REQUEST_MAX_BYTES, GenerateRequestSchema, type GenerateRequest } from "@/lib/schemas/requests";
+import { withSetCookies } from "@/lib/security/cookies";
 import { checkRateLimit, jsonError, jsonOk, readJson } from "@/lib/security/http";
 import { logApiError } from "@/lib/security/redact";
 
@@ -32,11 +34,15 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
 
   const parsed = await readJson(req, GenerateRequestSchema, GENERATE_REQUEST_MAX_BYTES);
   if (!parsed.ok) return parsed.response;
+  const resolved = await resolveRequestApiKey(req, parsed.data);
+  if (!resolved.ok) return resolved.response;
+  if (!resolved.apiKey) return jsonError(400, "invalid_request", "Informe a API key ou use a chave salva.");
+  const data: GenerateRequest = { ...parsed.data, apiKey: resolved.apiKey };
 
   const started = Date.now();
   const deadline = withGenerationDeadline(req.signal);
   try {
-    const result = await generateArtifact(artifact, parsed.data, {
+    const result = await generateArtifact(artifact, data, {
       realAi: isRealAiEnabled(),
       abortSignal: deadline.signal,
       telemetry: readModelCallContext(req, {
@@ -45,7 +51,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
         artifact,
       }),
     });
-    return jsonOk(result);
+    return withSetCookies(jsonOk(result), resolved.cookies);
   } catch (err) {
     if (req.signal.aborted && !deadline.timedOut()) return new Response(null, { status: 499 });
     const providerFailure = readProviderHttpFailure(err);
@@ -55,20 +61,23 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
       route: "/api/generate/[artifact]",
       error: err,
       statusCode,
-      provider: parsed.data.provider,
-      model: parsed.data.model,
+      provider: data.provider,
+      model: data.model,
       artifact,
       durationMs: Date.now() - started,
-      secrets: [parsed.data.apiKey],
+      secrets: [data.apiKey],
     });
-    if (err instanceof ProviderConfigError) return jsonError(400, "invalid_provider", "Provedor ou modelo inválido.");
+    const respond = (response: Response) => withSetCookies(response, resolved.cookies);
+    if (err instanceof ProviderConfigError) return respond(jsonError(400, "invalid_provider", "Provedor ou modelo inválido."));
     if (providerFailure?.statusCode === 429) {
       const seconds = providerFailure.retryAfterSec ?? 15;
-      return jsonError(429, "provider_rate_limited", providerRateLimitMessage(seconds), {
-        "Retry-After": String(seconds),
-      });
+      return respond(
+        jsonError(429, "provider_rate_limited", providerRateLimitMessage(seconds), {
+          "Retry-After": String(seconds),
+        }),
+      );
     }
-    if (timedOut) return jsonError(504, "provider_timeout", PROVIDER_SLOW_MESSAGE);
-    return jsonError(502, "generation_failed", "A geração falhou. Confira a chave e o modelo e tente de novo.");
+    if (timedOut) return respond(jsonError(504, "provider_timeout", PROVIDER_SLOW_MESSAGE));
+    return respond(jsonError(502, "generation_failed", "A geração falhou. Confira a chave e o modelo e tente de novo."));
   }
 }

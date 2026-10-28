@@ -17,7 +17,7 @@ export default function Home() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-14">
       <section className="flex flex-col items-center gap-6 pt-6 text-center">
-        <span className="bg-muted text-muted-foreground rounded-full px-3 py-1 text-xs">Para vagas de TI, sem cadastro</span>
+        <span className="bg-muted text-muted-foreground rounded-full px-3 py-1 text-xs">Para vagas de TI, sem cadastro obrigatório</span>
         <h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
           Do currículo à candidatura completa em poucos minutos
         </h1>
@@ -46,10 +46,10 @@ export default function Home() {
       <section className="bg-muted/40 flex flex-col gap-3 rounded-xl border p-6 sm:flex-row sm:items-start">
         <ShieldCheckIcon className="text-primary size-6 shrink-0" />
         <div className="text-sm">
-          <p className="font-medium">Sua chave não é salva</p>
+          <p className="font-medium">A chave continua sua</p>
           <p className="text-muted-foreground mt-1">
-            Você usa uma API key gratuita do Google Gemini ou da OpenRouter. Ela fica só na memória da página, vai por
-            HTTPS para a geração e é descartada em seguida. O currículo também não é armazenado.
+            Sem conta, a API key fica só na memória da página e some ao fechar a aba. Com conta, ela pode ser salva
+            cifrada e as candidaturas vão para o dashboard. O modo anônimo segue funcionando do mesmo jeito.
           </p>
         </div>
       </section>

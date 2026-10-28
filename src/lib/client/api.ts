@@ -59,6 +59,15 @@ async function handle<T>(res: Response): Promise<T> {
   throw new ApiError(message, res.status, code, parseRetryAfterValue(res.headers.get("retry-after")));
 }
 
+function requestBody(body: unknown): string {
+  if (body && typeof body === "object" && "useSavedKey" in body && (body as { useSavedKey?: boolean }).useSavedKey) {
+    const copy = { ...(body as Record<string, unknown>) };
+    delete copy.apiKey;
+    return JSON.stringify(copy);
+  }
+  return JSON.stringify(body);
+}
+
 function postJson(url: string, body: unknown, signal?: AbortSignal, attempt?: number) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -68,7 +77,7 @@ function postJson(url: string, body: unknown, signal?: AbortSignal, attempt?: nu
   return fetch(url, {
     method: "POST",
     headers,
-    body: JSON.stringify(body),
+    body: requestBody(body),
     signal,
     cache: "no-store",
   });
@@ -96,7 +105,8 @@ export async function validateKey(provider: ProviderId, apiKey: string) {
 export interface GeneratePayload {
   provider: ProviderId;
   model: string;
-  apiKey: string;
+  apiKey?: string;
+  useSavedKey?: boolean;
   resumeText: string;
   jobDescription: string;
   achievements: string;
@@ -140,7 +150,8 @@ export async function fetchSalary(
     workModel?: Brief["job"]["workModel"];
     provider: ProviderId;
     model: string;
-    apiKey: string;
+    apiKey?: string;
+    useSavedKey?: boolean;
   },
   signal?: AbortSignal,
   attempt?: number,

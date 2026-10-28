@@ -12,6 +12,8 @@ export interface FormValues {
   provider: ProviderId;
   model: string;
   apiKey: string;
+  /** Quando verdadeiro, o servidor decifra a chave salva e a chave não vai no corpo. */
+  useSavedKey?: boolean;
   outputs: OutputSelection;
 }
 

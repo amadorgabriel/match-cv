@@ -7,6 +7,8 @@ const SECRET_PATTERNS = [
   /AIza[0-9A-Za-z_-]{10,}/g,
   /Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
   /(?:api[_-]?key|app[_-]?key|x-api-key|x-goog-api-key|authorization|typesafe[_-]?api[_-]?key)\s*[=:]\s*["']?[^\s"'&,}]+/gi,
+  /postgres(?:ql)?:\/\/[^\s"'<>]+/gi,
+  /(?:KEY_ENCRYPTION_SECRET(?:_PREVIOUS|_V\d+)?|BETTER_AUTH_SECRET|DATABASE_URL)\s*[=:]\s*["']?[^\s"'&,}]+/gi,
 ];
 
 /** Segredos do servidor. Acesso dinâmico para a chave não entrar no bundle do browser. */

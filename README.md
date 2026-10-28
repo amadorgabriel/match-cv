@@ -2,7 +2,7 @@
 
 Produção: https://match-cv-app.vercel.app/
 
-Plataforma web **sem login** para candidaturas a vagas de TI. O usuário envia o currículo em PDF e a descrição da vaga, escolhe um provedor de IA, informa a própria API key e recebe cinco materiais:
+Plataforma web para candidaturas a vagas de TI. Dá para usar **sem login**. O usuário envia o currículo em PDF e a descrição da vaga, escolhe um provedor de IA, informa a própria API key e recebe cinco materiais:
 
 1. **CV em PDF compatível com ATS**, alinhado à vaga
 2. **E-mail** para a empresa (com botão de copiar)
@@ -10,7 +10,7 @@ Plataforma web **sem login** para candidaturas a vagas de TI. O usuário envia o
 4. **Roteiro de entrevista** em seções expansíveis
 5. **Faixa salarial** estimada, com as fontes citadas e um link para o Glassdoor
 
-O modelo é BYOK (*bring your own key*): cada usuário paga o próprio uso de IA. A chave, o currículo e o perfil extraído ficam só na memória do navegador.
+O modelo é BYOK (*bring your own key*): cada usuário paga o próprio uso de IA. Sem conta, a chave fica na memória da página (ou, se o usuário pedir, num cookie cifrado). Com conta, a chave e as candidaturas podem ir para o Postgres. A arquitetura está em [`docs/auth-architecture.md`](docs/auth-architecture.md).
 
 Por padrão só o **CV** vem marcado. E-mail, cover letter, entrevista e faixa salarial são gerados pelo botão **Gerar** de cada aba. O usuário ainda pode marcar mais de um antes de começar.
 
@@ -27,6 +27,7 @@ Por padrão só o **CV** vem marcado. E-mail, cover letter, entrevista e faixa s
 | PDF | `@react-pdf/renderer` no navegador, com prévia em blob |
 | Salário | Busca nativa do provedor na web pública e link de referência do Glassdoor |
 | Telemetria | `@vercel/otel`, `@langfuse/otel` opcional e `@sentry/nextjs` opcional |
+| Conta | Better Auth + Drizzle sobre Postgres, só quando `DATABASE_URL` e `BETTER_AUTH_SECRET` existem |
 | Testes | Vitest |
 | Hospedagem | Vercel |
 
@@ -201,7 +202,7 @@ O plano Hobby é gratuito e vale para uso pessoal e não comercial.
 - CSP com nonce em `src/proxy.ts` (`connect-src 'self'`, `frame-src 'self' blob:`, `object-src blob:`). `style-src` ainda tem `unsafe-inline`. O túnel `/monitoring` do Sentry fica fora do proxy. Os outros headers de segurança ficam em `next.config.ts`.
 - A saída do modelo é texto puro, sem `dangerouslySetInnerHTML`.
 - Rate limit por IP em todas as rotas de API. Com Upstash Redis a janela deslizante vale entre instâncias. Sem as variáveis, ou se o Redis falha, o limite em memória desta instância assume.
-- `logApiError` e `logApiWarning` mascaram `sk-`, `sk-ant-`, `sk-or-`, `AIza`, `Bearer`, `app_key`, `TYPESAFE_API_KEY` e os segredos passados na chamada. A resposta de erro não devolve a chave nem o corpo.
+- `logApiError` e `logApiWarning` mascaram `sk-`, `sk-ant-`, `sk-or-`, `AIza`, `Bearer`, `app_key`, `TYPESAFE_API_KEY`, URLs `postgres://` e os valores de `DATABASE_URL`, `BETTER_AUTH_SECRET` e `KEY_ENCRYPTION_SECRET`, além dos segredos passados na chamada. A resposta de erro não devolve a chave nem o corpo.
 
 ## Rate limit com Upstash Redis
 
@@ -230,10 +231,25 @@ Ao estourar o limite a resposta é HTTP 429, com header `Retry-After` e o JSON `
 | `/api/cv/pdf` | `matchcv:rl:cv-pdf` | 30 | 31º |
 | `/api/key/validate` | `matchcv:rl:key-validate` | 10 | 11º |
 | `/api/verify` | `matchcv:rl:verify` | 20 | 21º |
+| `/api/keys` | `matchcv:rl:keys` | 20 | 21º |
+| `/api/applications` | `matchcv:rl:applications` | 30 | 31º |
+| `/api/account` | `matchcv:rl:account` | 10 no DELETE, 30 no GET | o seguinte |
+| `/api/auth` | `matchcv:rl:auth` | 30 | 31º |
 
 Num disparo seguido, com a janela anterior vazia, o pedido da última coluna recebe 429. Perto da fronteira da janela, o peso da janela anterior também conta.
 
+## Conta, dashboard e chave cifrada
+
+Opcional. Sem as variáveis, `npm run dev` e os testes seguem no modo anônimo.
+
+- **Better Auth** (magic link, GitHub e Google) e **Drizzle** sobre Postgres quando `DATABASE_URL` e `BETTER_AUTH_SECRET` existem. O schema está em `src/lib/db/schema.ts`. `npm run db:push` aplica as tabelas.
+- **Chave salva** com envelope AES-256-GCM. O navegador só vê provedor, últimos 4 caracteres e status. A decifragem fica no handler (`useSavedKey: true`). Sem banco, a chave vai para o cookie `HttpOnly` `matchcv_key_vault`.
+- **Dashboard** em `/dashboard`: empresa, vaga, data, status (`aplicado`, `entrevista`, `oferta`, `recusado`), busca, anotações, os cinco materiais e exclusão. Sem sessão, a lista fica em `localStorage`.
+- **LGPD:** o menu Conta tem "Excluir conta e todos os dados (LGPD)". `DELETE /api/account` apaga usuário, sessões, chaves e candidaturas no banco e limpa o cofre local.
+
+Variáveis: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `KEY_ENCRYPTION_SECRET`, `KEY_ENCRYPTION_KEK_VERSION`, `KEY_ENCRYPTION_SECRET_PREVIOUS`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`. O exemplo está no `.env.example`.
+
 ## Fora deste código
 
-- Login, banco e chave de IA persistida no servidor. A `TYPESAFE_API_KEY` é opcional e só serve para a checagem Jev.
+- A `TYPESAFE_API_KEY` é opcional e só serve para a checagem Jev. Sem ela, a nota CV × vaga continua local.
 - DOCX e PDF escaneado. O app aceita só PDF com texto e responde "Por enquanto só aceitamos CV em PDF." ou, no PDF sem texto, que o arquivo parece escaneado.

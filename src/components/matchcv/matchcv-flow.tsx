@@ -127,8 +127,7 @@ export function MatchCvFlow() {
     try {
       const salary = await runWithRetry(
         "salary",
-        (attempt) =>
-          fetchSalary(salaryQueryFromBrief(payload), signal, attempt),
+        (attempt) => fetchSalary(salaryQueryFromBrief(payload), signal, attempt),
         signal,
       );
       if (signal?.aborted) return;
@@ -238,7 +237,8 @@ export function MatchCvFlow() {
     const payload: GeneratePayload = {
       provider: form.provider,
       model: form.model,
-      apiKey: form.apiKey,
+      apiKey: form.useSavedKey ? undefined : form.apiKey,
+      useSavedKey: form.useSavedKey,
       resumeText: "",
       jobDescription: form.jobDescription,
       achievements: form.achievements,

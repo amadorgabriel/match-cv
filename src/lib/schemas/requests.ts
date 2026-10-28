@@ -31,7 +31,9 @@ export const ValidateKeyRequestSchema = z.object({
 });
 
 export const GenerateRequestSchema = ProviderSelectionSchema.extend({
-  apiKey,
+  apiKey: apiKey.optional(),
+  /** Quando verdadeiro, o handler decifra a chave salva e o corpo não traz a chave. */
+  useSavedKey: z.boolean().optional(),
   resumeText: z.string().min(50, "Currículo vazio ou muito curto").max(LIMITS.maxResumeChars),
   jobDescription: z.string().min(50, "Descrição da vaga muito curta").max(LIMITS.maxJobDescriptionChars),
   achievements: z.string().max(LIMITS.maxAchievementsChars).optional().default(""),
@@ -39,8 +41,12 @@ export const GenerateRequestSchema = ProviderSelectionSchema.extend({
   achievementsDocument: z.string().max(LIMITS.maxResumeChars).optional().default(""),
   /** Perfil e vaga já extraídos neste fluxo. O servidor não guarda este objeto. */
   brief: BriefSchema.optional(),
+}).superRefine((value, ctx) => {
+  if (!value.useSavedKey && !value.apiKey) {
+    ctx.addIssue({ code: "custom", message: "Informe a API key ou use a chave salva.", path: ["apiKey"] });
+  }
 });
-export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;
+export type GenerateRequest = z.infer<typeof GenerateRequestSchema> & { apiKey: string };
 
 /** Materiais que o usuário pode marcar no formulário. */
 export const OUTPUT_IDS = ["cv", "email", "cover-letter", "interview", "salary"] as const;
@@ -111,5 +117,6 @@ export const SalaryRequestSchema = z.object({
   provider: z.enum(PROVIDER_IDS).optional(),
   model: z.string().regex(MODEL_ID_PATTERN, "ID de modelo inválido").optional(),
   apiKey: apiKey.optional(),
+  useSavedKey: z.boolean().optional(),
 });
 export type SalaryRequest = z.infer<typeof SalaryRequestSchema>;

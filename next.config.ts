@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
   },
   partialPrefetching: true,
   // unpdf traz o pdf.js; manter fora do bundle do servidor.
-  serverExternalPackages: ["unpdf", "@react-pdf/renderer"],
+  serverExternalPackages: ["unpdf", "@react-pdf/renderer", "postgres"],
   turbopack: {
     rules: {
       "*.css": {

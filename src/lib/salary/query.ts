@@ -6,7 +6,8 @@ export function salaryQueryFromBrief(input: {
   jobDescription: string;
   provider: ProviderId;
   model: string;
-  apiKey: string;
+  apiKey?: string;
+  useSavedKey?: boolean;
   brief?: Brief;
 }): {
   jobDescription: string;
@@ -19,7 +20,8 @@ export function salaryQueryFromBrief(input: {
   workModel?: WorkModel;
   provider: ProviderId;
   model: string;
-  apiKey: string;
+  apiKey?: string;
+  useSavedKey?: boolean;
 } {
   const job = input.brief?.job;
   return {
@@ -34,6 +36,7 @@ export function salaryQueryFromBrief(input: {
     provider: input.provider,
     model: input.model,
     apiKey: input.apiKey,
+    useSavedKey: input.useSavedKey,
   };
 }
 

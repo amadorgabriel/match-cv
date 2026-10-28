@@ -22,6 +22,7 @@ import { glassdoorSalaryLinkLabel, glassdoorSalarySearchUrl } from "@/lib/salary
 import { analyzeJob } from "@/lib/salary/job";
 import type { VerificationReport } from "@/lib/verification/types";
 import { CopyButton } from "./copy-button";
+import { SaveApplicationButton } from "./save-application-button";
 import { CoverLetterPdf } from "./cover-letter-pdf";
 import { CvPdfPreview } from "./cv-pdf-preview";
 import type { StepId, StepState } from "./types";
@@ -261,7 +262,8 @@ export function ResultsStep({
           <h1 className="text-2xl font-semibold tracking-tight">Seus materiais estão prontos</h1>
           <p className="text-muted-foreground mt-1 text-sm">Revise tudo antes de enviar. A IA pode errar.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <SaveApplicationButton jobDescription={jobDescription} results={results} />
           <Button variant="outline" onClick={onEdit}>
             Editar dados
           </Button>
