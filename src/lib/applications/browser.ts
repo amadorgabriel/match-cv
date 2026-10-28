@@ -1,8 +1,11 @@
 import {
   ApplicationRequestError,
+  applicationStorageKey,
   createHttpApplicationRepository,
   createLocalApplicationRepository,
+  isApplicationStorageKey,
   isLocalFallbackStatus,
+  persistenceTarget,
   syncLocalApplications,
   type ApplicationRepository,
 } from "@/lib/applications/store";
@@ -11,29 +14,28 @@ import type { ApplicationPatch, JobApplication, NewApplication } from "@/lib/app
 export const DATA_CLEARED_EVENT = "matchcv-data-cleared";
 const LOCAL_USER = null;
 
-let modeCache: { at: number; mode: "local" | "remote" } | null = null;
+let modeCache: { at: number; mode: "local" | "remote" | "account"; userId: string | null } | null = null;
 
 export function resetPersistenceMode(): void {
   modeCache = null;
 }
 
-async function persistenceMode(): Promise<"local" | "remote"> {
-  if (typeof window === "undefined") return "local";
-  if (modeCache && Date.now() - modeCache.at < 5_000) return modeCache.mode;
+async function resolveTarget(): Promise<{ mode: "local" | "remote" | "account"; userId: string | null }> {
+  if (typeof window === "undefined") return { mode: "local", userId: null };
+  if (modeCache && Date.now() - modeCache.at < 5_000) return modeCache;
   try {
     const response = await fetch("/api/account", { cache: "no-store" });
-    if (!response.ok) return "local";
-    const body = (await response.json()) as { user?: unknown; database?: boolean };
-    const mode = body.user && body.database ? "remote" : "local";
-    modeCache = { at: Date.now(), mode };
-    return mode;
+    if (!response.ok) return { mode: "local", userId: null };
+    const target = persistenceTarget((await response.json()) as Parameters<typeof persistenceTarget>[0]);
+    modeCache = { at: Date.now(), ...target };
+    return target;
   } catch {
-    return "local";
+    return { mode: "local", userId: null };
   }
 }
 
-function localRepo(): ApplicationRepository {
-  return createLocalApplicationRepository(window.localStorage);
+function scopedRepo(userId: string | null): ApplicationRepository {
+  return createLocalApplicationRepository(window.localStorage, applicationStorageKey(userId), userId);
 }
 
 function remoteRepo(): ApplicationRepository {
@@ -41,19 +43,24 @@ function remoteRepo(): ApplicationRepository {
 }
 
 async function withFallback<T>(run: (repo: ApplicationRepository, userId: string | null) => Promise<T>): Promise<T> {
-  const mode = await persistenceMode();
-  const local = localRepo();
-  if (mode === "remote") {
+  const target = await resolveTarget();
+  const anonymous = scopedRepo(null);
+  if (target.mode === "remote") {
     const remote = remoteRepo();
     try {
-      await syncLocalApplications(local, remote, "session");
-      return await run(remote, "session");
+      await syncLocalApplications(anonymous, remote, target.userId ?? "session");
+      return await run(remote, target.userId);
     } catch (error) {
-      if (error instanceof ApplicationRequestError && isLocalFallbackStatus(error.status)) return run(local, LOCAL_USER);
+      if (error instanceof ApplicationRequestError && isLocalFallbackStatus(error.status)) return run(anonymous, LOCAL_USER);
       throw error;
     }
   }
-  return run(local, LOCAL_USER);
+  if (target.mode === "account" && target.userId) {
+    const account = scopedRepo(target.userId);
+    await syncLocalApplications(anonymous, account, target.userId);
+    return run(account, target.userId);
+  }
+  return run(anonymous, LOCAL_USER);
 }
 
 export async function listApplications(): Promise<JobApplication[]> {
@@ -75,5 +82,21 @@ export async function removeApplication(id: string): Promise<void> {
 export function clearLocalApplications(): Promise<number> {
   resetPersistenceMode();
   if (typeof window === "undefined") return Promise.resolve(0);
-  return createLocalApplicationRepository(window.localStorage).deleteAll(LOCAL_USER);
+  const storage = window.localStorage;
+  const keys: string[] = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key && isApplicationStorageKey(key)) keys.push(key);
+  }
+  let count = 0;
+  for (const key of keys) {
+    try {
+      const parsed = JSON.parse(storage.getItem(key) ?? "[]") as unknown;
+      if (Array.isArray(parsed)) count += parsed.length;
+    } catch {
+      // Conteúdo inválido ainda sai do navegador.
+    }
+    storage.removeItem(key);
+  }
+  return Promise.resolve(count);
 }

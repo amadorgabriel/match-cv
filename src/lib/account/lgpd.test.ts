@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import { eraseAccountData, type ErasableAccount } from "@/lib/account/erase";
 import { isAuthConfigured } from "@/lib/auth/env";
 import {
+  applicationStorageKey,
   createLocalApplicationRepository,
   createMemoryApplicationRepository,
   draftFromResults,
   filterApplications,
+  persistenceTarget,
   syncLocalApplications,
 } from "@/lib/applications/store";
 import { ApplicationStoreError, type JobApplication } from "@/lib/applications/types";
@@ -90,6 +92,27 @@ describe("dashboard de candidaturas", () => {
     expect((await remote.list("user-1"))[0]?.company).toBe("Beta");
     await local.deleteAll(null);
     expect(storage.getItem("matchcv:applications")).toBeNull();
+  });
+
+  it("leva a candidatura anônima para o balde da sessão local", async () => {
+    const storage = memoryStorage();
+    const anon = createLocalApplicationRepository(storage, applicationStorageKey(null), null);
+    const account = createLocalApplicationRepository(storage, applicationStorageKey("local_ana"), "local_ana");
+    await anon.create(null, { company: "Solta", role: "Dev" });
+    expect(await syncLocalApplications(anon, account, "local_ana")).toBe(1);
+    expect(await anon.list(null)).toEqual([]);
+    const saved = await account.list("local_ana");
+    expect(saved).toEqual([expect.objectContaining({ company: "Solta", userId: "local_ana" })]);
+    expect(storage.getItem(applicationStorageKey("local_ana"))).toContain("Solta");
+    expect(persistenceTarget({ authenticated: true, database: false, sessionKind: "local", user: { id: "local_ana" } })).toEqual({
+      mode: "account",
+      userId: "local_ana",
+    });
+    expect(persistenceTarget({ authenticated: true, database: true, sessionKind: "better-auth", user: { id: "user-1" } })).toEqual({
+      mode: "remote",
+      userId: "user-1",
+    });
+    expect(persistenceTarget({ authenticated: false, user: null })).toEqual({ mode: "local", userId: null });
   });
 
   it("monta o rascunho com empresa, vaga e materiais", () => {
