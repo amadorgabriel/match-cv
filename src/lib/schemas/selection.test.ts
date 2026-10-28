@@ -34,7 +34,7 @@ describe("seleção de materiais", () => {
       salary: false,
     });
     expect(OutputSelectionSchema.parse(DEFAULT_OUTPUT_SELECTION)).toEqual(DEFAULT_OUTPUT_SELECTION);
-    expect(processingStepsFor(DEFAULT_OUTPUT_SELECTION)).toEqual(["parse", "cv"]);
+    expect(processingStepsFor(DEFAULT_OUTPUT_SELECTION)).toEqual(["parse", "brief", "cv"]);
   });
 
   it("inclui a análise da vaga, o e-mail, a carta e a entrevista quando esses itens estão marcados", () => {
@@ -49,21 +49,21 @@ describe("seleção de materiais", () => {
     ).toEqual(["parse", "brief", "email", "cover-letter", "interview"]);
   });
 
-  it("só consulta /api/salary quando a faixa salarial é o único material", () => {
-    expect(processingStepsFor({ ...none, salary: true })).toEqual(["salary"]);
+  it("consulta o brief e depois /api/salary quando a faixa é o único material", () => {
+    expect(processingStepsFor({ ...none, salary: true })).toEqual(["brief", "salary"]);
   });
 
   it("lê o currículo apenas quando há texto de IA para gerar", () => {
     expect(processingStepsFor({ ...none, email: true })).toEqual(["parse", "brief", "email"]);
     expect(processingStepsFor({ ...none, salary: true })).not.toContain("parse");
-    expect(processingStepsFor({ ...none, cv: true })).toEqual(["parse", "cv"]);
+    expect(processingStepsFor({ ...none, cv: true })).toEqual(["parse", "brief", "cv"]);
   });
 
-  it("analisa a vaga só para e-mail, carta ou entrevista", () => {
-    expect(processingStepsFor({ ...none, cv: true, salary: true })).toEqual(["parse", "cv", "salary"]);
+  it("extrai o brief para CV, salário, e-mail, carta e entrevista", () => {
+    expect(processingStepsFor({ ...none, cv: true, salary: true })).toEqual(["parse", "brief", "cv", "salary"]);
     expect(processingStepsFor({ ...none, cv: true, email: true })).toEqual(["parse", "brief", "cv", "email"]);
-    expect(processingStepsFor({ ...none, salary: true })).not.toContain("brief");
-    expect(processingStepsFor(DEFAULT_OUTPUT_SELECTION)).not.toContain("brief");
+    expect(processingStepsFor({ ...none, salary: true })).toContain("brief");
+    expect(processingStepsFor(DEFAULT_OUTPUT_SELECTION)).toContain("brief");
   });
 
   it("exige pelo menos um material", () => {

@@ -5,13 +5,37 @@ import { generateText, isStepCount } from "ai";
 import type { ProviderId } from "@/lib/ai/catalog";
 import { withModelSpan } from "@/lib/ai/model-span";
 import { readProviderHttpFailure } from "@/lib/ai/provider-error";
-import { buildWebSearchRequest, supportsNativeWebSearch } from "@/lib/ai/providers";
+import { buildWebSearchRequest, supportsSalaryWebSearch } from "@/lib/ai/providers";
 import { modelTelemetry, type ModelCallContext } from "@/lib/ai/telemetry-context";
 import { logApiError, logModelUsage } from "@/lib/security/redact";
 import { buildWebSalaryPrompt, WEB_SALARY_MAX_OUTPUT_TOKENS, WEB_SALARY_SYSTEM } from "@/prompts/salary";
 
 import type { JobAnalysis } from "./job";
-import { parseWebSalaryText, type WebSalaryHit } from "./web-parse";
+import { parseWebSalaryText, readLooseCitations, type CitedUrl, type WebSalaryHit } from "./web-parse";
+
+/** Citações estruturadas do SDK, ou anotações soltas quando o modelo não as devolve. */
+export function citationsFromWebResult(result: {
+  sources?: Array<{ sourceType?: string; url?: string; title?: string }>;
+  providerMetadata?: unknown;
+  response?: { body?: unknown };
+}): CitedUrl[] {
+  const structured = (result.sources ?? []).flatMap((source) =>
+    source.sourceType === "url" && source.url ? [{ url: source.url, title: source.title }] : [],
+  );
+  if (structured.length > 0) return structured;
+  return dedupeCitations([...readLooseCitations(result.providerMetadata), ...readLooseCitations(result.response?.body)]);
+}
+
+function dedupeCitations(items: CitedUrl[]): CitedUrl[] {
+  const seen = new Set<string>();
+  const out: CitedUrl[] = [];
+  for (const item of items) {
+    if (seen.has(item.url)) continue;
+    seen.add(item.url);
+    out.push(item);
+  }
+  return out;
+}
 
 export class WebSearchRateLimitError extends Error {
   readonly retryAfterSec: number;
@@ -36,7 +60,7 @@ export async function searchWebSalary(input: {
   signal?: AbortSignal;
   telemetry?: ModelCallContext;
 }): Promise<WebSalaryHit | null> {
-  if (!supportsNativeWebSearch(input.provider)) return null;
+  if (!supportsSalaryWebSearch(input.provider)) return null;
   const request = buildWebSearchRequest(input.provider, input.model, input.apiKey);
   if (!request) return null;
 
@@ -53,8 +77,7 @@ export async function searchWebSalary(input: {
     const result = await withModelSpan(call, () =>
       generateText({
         model: request.model,
-        tools: request.tools,
-        stopWhen: isStepCount(4),
+        ...(request.tools ? { tools: request.tools, stopWhen: isStepCount(4) } : {}),
         system: WEB_SALARY_SYSTEM,
         prompt: buildWebSalaryPrompt({
           title: input.job.normalizedTitle,
@@ -77,10 +100,7 @@ export async function searchWebSalary(input: {
       outputTokens: result.usage.outputTokens,
       totalTokens: result.usage.totalTokens,
     });
-    const cited = (result.sources ?? []).flatMap((source) =>
-      source.sourceType === "url" ? [{ url: source.url, title: source.title }] : [],
-    );
-    return parseWebSalaryText(result.text, cited);
+    return parseWebSalaryText(result.text, citationsFromWebResult(result));
   } catch (error) {
     const failure = readProviderHttpFailure(error);
     if (failure?.statusCode === 429) throw new WebSearchRateLimitError(failure.retryAfterSec ?? 15);

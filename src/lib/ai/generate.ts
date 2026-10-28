@@ -76,8 +76,8 @@ function applyHumanizer<A extends Artifact>(
  * Gera um artefato. Com a IA desligada, devolve o mock (já passando pelo
  * validador). Com MATCHCV_ENABLE_AI=true, chama o modelo do usuário.
  *
- * O perfil compartilhado, quando vem no request, alimenta e-mail, carta e entrevista.
- * O CV continua com o texto bruto. Não há cache de prompt nem fusão de artefatos.
+ * O perfil compartilhado alimenta o CV como mapa da vaga, e também e-mail, carta e entrevista.
+ * O CV continua com o texto bruto do currículo. Não há cache de prompt nem fusão de artefatos.
  */
 export async function generateArtifact<A extends Artifact>(
   artifact: A,

@@ -2,7 +2,7 @@
 
 Produção: https://match-cv-app.vercel.app/
 
-Plataforma web **sem login** para candidaturas a vagas de TI. O usuário envia o currículo em PDF e a descrição da vaga, escolhe um provedor de IA gratuito, informa a própria API key e recebe cinco materiais:
+Plataforma web **sem login** para candidaturas a vagas de TI. O usuário envia o currículo em PDF e a descrição da vaga, escolhe um provedor de IA, informa a própria API key e recebe cinco materiais:
 
 1. **CV em PDF compatível com ATS**, alinhado à vaga
 2. **E-mail** para a empresa (com botão de copiar)
@@ -55,13 +55,15 @@ MatchCV/
 │  │     ├─ brief/            # perfil curto do CV e resumo da vaga
 │  │     ├─ generate/[artifact]/
 │  │     ├─ cv/pdf/
-│  │     └─ salary/
+│  │     ├─ salary/
+│  │     └─ verify/           # nota CV × vaga e checagem de fidelidade
 │  ├─ components/matchcv/
 │  ├─ lib/
 │  │  ├─ ai/                  # catálogo, buildModel, telemetria
 │  │  ├─ client/
 │  │  ├─ pdf/
 │  │  ├─ salary/
+│  │  ├─ verification/    # nota CV × vaga e checagem de fidelidade
 │  │  ├─ schemas/
 │  │  ├─ security/
 │  │  └─ text/
@@ -94,7 +96,7 @@ Abra http://localhost:3000.
 
 As chaves de IA **não ficam no `.env`**. Cada usuário digita a própria chave no formulário.
 
-- **No seletor:** só modelos gratuitos. Hoje isso é Google Gemini (`gemini-3.8-flash` e as variantes Flash-Lite) e OpenRouter (`openrouter/free` e os modelos `:free`). OpenAI, Anthropic e Together continuam no código para `buildModel`, mas ficam fora do seletor porque não têm chave gratuita. A lista está em `src/lib/ai/catalog.ts`.
+- **No seletor:** Google, OpenRouter, OpenAI, Anthropic e Together. Cada modelo tem badge **Gratuito** ou **Pago**. O padrão inicial é o Gemini gratuito (`gemini-3.8-flash`). O filtro "Mostrar apenas gratuitos" esconde o que exige plano pago. A lista está em `src/lib/ai/catalog.ts`.
 - **No navegador:** a chave fica no estado do React. "Lembrar nesta aba" usa `sessionStorage` e some ao fechar a aba. O app não usa `localStorage`. Um UUID anônimo separado (`matchcv:anon-session`) identifica a sessão na telemetria.
 - **No envio:** a chave vai no corpo de um POST para as rotas `/api` do próprio app, nunca na URL.
 - **No servidor:** `buildModel(provider, modelId, apiKey)` cria o provider dentro do handler, a cada request. As `baseURL` de Together e OpenRouter são fixas. A chave não é logada, persistida nem devolvida.
@@ -108,9 +110,9 @@ As gerações de texto rodam com concorrência 2 (1 no Google), retry em 429 e 5
 
 ### Perfil reaproveitado
 
-Na primeira geração de e-mail, cover letter ou entrevista, `POST /api/brief` extrai uma vez um perfil curto do currículo e um resumo da vaga. O resultado fica no estado do fluxo, no navegador, e as gerações seguintes da mesma sessão reutilizam esse objeto. Nada disso é gravado no servidor.
+`POST /api/brief` roda antes de qualquer material: CV, faixa salarial, e-mail, cover letter ou entrevista. O resultado fica no estado do fluxo, no navegador, e as gerações seguintes da mesma sessão reutilizam esse objeto, inclusive o botão Gerar de cada aba. Nada disso é gravado no servidor.
 
-O CV ATS continua recebendo o texto bruto do currículo. O perfil curto não guarda empresas, datas e bullets com a fidelidade que o PDF precisa repetir.
+O brief traz contato, senioridade, anos de experiência, cargo canônico para busca (`normalizedSearchTitle`), modelo de trabalho e empresa só quando o nome real da contratante está na vaga. O CV ATS continua recebendo o texto bruto do currículo e usa o brief como mapa da vaga. O nome do PDF usa a empresa do brief e só cai no regex se esse campo vier vazio.
 
 ### Regras anti-IA
 
@@ -118,11 +120,17 @@ Os prompts de CV, cover letter e e-mail incluem `src/prompts/anti-ai-rules.ts`. 
 
 ## Faixa salarial
 
-1. A descrição da vaga é normalizada (cargo, senioridade, empresa, local).
-2. Com a IA ligada, se o provedor tiver busca nativa, uma chamada com a ferramenta do modelo estima a faixa e cita só URLs que a ferramenta devolveu.
+1. A busca usa primeiro o cargo, a empresa, a senioridade e o local extraídos no brief. O regex de `analyzeJob` só preenche o que veio vazio e ignora cabeçalho genérico, menção solta no meio da vaga e falso positivo de empresa (`América Latina`, `Brasil`, `Time de ...`, `Nossa Equipe`, `Scale`).
+2. Com a IA ligada, OpenAI, Anthropic e Google usam a busca nativa. O OpenRouter usa o sufixo `:online` (atalho do plugin web) no modelo de salário. Se o modelo não devolver citação estruturada, a faixa numérica ainda entra e o link só aparece quando há URL citável. Together continua sem busca na web.
 3. Sem números, a rota responde 200 com "faixa não disponível". Não é erro.
 4. O link do Glassdoor aparece sempre. É uma busca por palavra-chave em `glassdoor.com.br` (`Salários/<termo>-salário-SRCH_KO0,N.htm`), com o cargo na frente da empresa. O app não raspa o Glassdoor e não busca o id interno da empresa.
 5. Com `MATCHCV_ENABLE_AI` diferente de `true`, `/api/salary` devolve um exemplo e não consulta a web.
+
+## Compatibilidade e fidelidade
+
+A tela de resultados mostra a nota de 0 a 100 (cobertura dos requisitos, palavras-chave, senioridade e experiências do CV original) e o status de cada afirmação gerada: com apoio, sem apoio ou em conflito com o currículo. `POST /api/verify` faz essa conta no servidor.
+
+Sem `TYPESAFE_API_KEY`, a checagem é local e em português. Com a chave, a nota e o status passam pela API do Jev (`https://api.typesafe.ai/v1/systemone`). Se essa chamada falhar, o verificador local assume. A chave não sai do servidor e entra no mascaramento de `redactSecrets`.
 
 ## Telemetria
 
@@ -146,7 +154,7 @@ O browser envia eventos para `/monitoring` no próprio app (`tunnelRoute`). A CS
 
 `beforeSend`, `beforeSendTransaction` e `beforeSendSpan` removem `Authorization`, `x-api-key`, `x-goog-api-key`, `apiKey`, `app_key`, cookies, o corpo do request e o texto do CV e da vaga, com o mesmo `redactSecrets` dos logs. O SDK 11 não tem mais `sendDefaultPii`; `dataCollection` deixa IP, cookies, corpos e texto de IA desligados.
 
-Erros das rotas `/api/generate`, `/api/brief`, `/api/salary`, `/api/parse`, `/api/cv/pdf` e `/api/key/validate` passam por `logApiError`, que envia ao Sentry as tags `route`, `artifact`, `provider` e `model`. A chave não entra. `src/app/global-error.tsx` captura erro de render do App Router.
+Erros das rotas `/api/generate`, `/api/brief`, `/api/salary`, `/api/parse`, `/api/cv/pdf`, `/api/key/validate` e `/api/verify` passam por `logApiError`, que envia ao Sentry as tags `route`, `artifact`, `provider` e `model`. A chave não entra. `src/app/global-error.tsx` captura erro de render do App Router.
 
 ### Projeto no sentry.io
 
@@ -193,7 +201,7 @@ O plano Hobby é gratuito e vale para uso pessoal e não comercial.
 - CSP com nonce em `src/proxy.ts` (`connect-src 'self'`, `frame-src 'self' blob:`, `object-src blob:`). `style-src` ainda tem `unsafe-inline`. O túnel `/monitoring` do Sentry fica fora do proxy. Os outros headers de segurança ficam em `next.config.ts`.
 - A saída do modelo é texto puro, sem `dangerouslySetInnerHTML`.
 - Rate limit por IP em todas as rotas de API. Com Upstash Redis a janela deslizante vale entre instâncias. Sem as variáveis, ou se o Redis falha, o limite em memória desta instância assume.
-- `logApiError` e `logApiWarning` mascaram `sk-`, `sk-ant-`, `sk-or-`, `AIza`, `Bearer`, `app_key` e os segredos passados na chamada. A resposta de erro não devolve a chave nem o corpo.
+- `logApiError` e `logApiWarning` mascaram `sk-`, `sk-ant-`, `sk-or-`, `AIza`, `Bearer`, `app_key`, `TYPESAFE_API_KEY` e os segredos passados na chamada. A resposta de erro não devolve a chave nem o corpo.
 
 ## Rate limit com Upstash Redis
 
@@ -221,11 +229,11 @@ Ao estourar o limite a resposta é HTTP 429, com header `Retry-After` e o JSON `
 | `/api/generate/[artifact]` | `matchcv:rl:generate` | 30 | 31º |
 | `/api/cv/pdf` | `matchcv:rl:cv-pdf` | 30 | 31º |
 | `/api/key/validate` | `matchcv:rl:key-validate` | 10 | 11º |
+| `/api/verify` | `matchcv:rl:verify` | 20 | 21º |
 
 Num disparo seguido, com a janela anterior vazia, o pedido da última coluna recebe 429. Perto da fronteira da janela, o peso da janela anterior também conta.
 
 ## Fora deste código
 
-- Login, banco e chave de API persistida.
+- Login, banco e chave de IA persistida no servidor. A `TYPESAFE_API_KEY` é opcional e só serve para a checagem Jev.
 - DOCX e PDF escaneado. O app aceita só PDF com texto e responde "Por enquanto só aceitamos CV em PDF." ou, no PDF sem texto, que o arquivo parece escaneado.
-- Provedores pagos no seletor. OpenAI, Anthropic e Together permanecem ocultos enquanto `FREE_TIER_ONLY` estiver ligado.

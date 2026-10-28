@@ -34,17 +34,66 @@ export function supportsNativeWebSearch(provider: ProviderId): boolean {
 }
 
 /**
- * Monta o modelo e a ferramenta de busca na web com a chave do usuário.
- * Together e OpenRouter não têm essa ferramenta e devolvem null.
+ * Busca salarial na web. Além da ferramenta nativa, o OpenRouter entra
+ * com o sufixo `:online` (atalho do plugin web) no modelo de salário.
+ * Together continua sem busca.
+ */
+export function supportsSalaryWebSearch(provider: ProviderId): boolean {
+  return supportsNativeWebSearch(provider) || provider === "openrouter";
+}
+
+/** `modelo:free` vira `modelo:free:online`. Quem já termina em `:online` fica. */
+export function openRouterWebModelId(modelId: string): string {
+  if (modelId.endsWith(":online")) return modelId;
+  return `${modelId}:online`;
+}
+
+/**
+ * Fallback quando o sufixo estoura o tamanho do ID. Injeta o plugin `web`
+ * do OpenRouter no corpo, sem pacote novo. O `:online` é o caminho normal.
+ */
+export function withOpenRouterWebPlugin(fetchImpl: typeof fetch = fetch): typeof fetch {
+  return async (input, init) => {
+    if (init?.body && typeof init.body === "string") {
+      try {
+        const json = JSON.parse(init.body) as Record<string, unknown>;
+        const plugins = Array.isArray(json.plugins) ? json.plugins : [];
+        json.plugins = [...plugins, { id: "web", max_results: 3 }];
+        init = { ...init, body: JSON.stringify(json) };
+      } catch {
+        // Corpo que não é JSON segue sem o plugin.
+      }
+    }
+    return fetchImpl(input, init);
+  };
+}
+
+/**
+ * Monta o modelo e, quando existe, a ferramenta de busca na web com a chave do usuário.
+ * Together não tem busca e devolve null. OpenRouter usa `:online` ou o plugin web.
  * A chave não é logada. As baseURLs continuam só na allowlist.
  */
 export function buildWebSearchRequest(
   provider: ProviderId,
   modelId: string,
   apiKey: string,
-): { model: LanguageModel; tools: ToolSet } | null {
+): { model: LanguageModel; tools?: ToolSet } | null {
   if (!isProviderId(provider) || !MODEL_ID_PATTERN.test(modelId) || !apiKey) return null;
-  if (!supportsNativeWebSearch(provider)) return null;
+  if (!supportsSalaryWebSearch(provider)) return null;
+
+  if (provider === "openrouter") {
+    const onlineId = openRouterWebModelId(modelId);
+    const useSuffix = MODEL_ID_PATTERN.test(onlineId);
+    const openrouter = createOpenAICompatible({
+      name: "openrouter",
+      baseURL: OPENAI_COMPATIBLE_ENDPOINTS.openrouter,
+      apiKey,
+      supportsStructuredOutputs: false,
+      headers: { "X-Title": "MatchCV" },
+      fetch: useSuffix ? undefined : withOpenRouterWebPlugin(),
+    });
+    return { model: openrouter(useSuffix ? onlineId : modelId) };
+  }
 
   switch (provider) {
     case "openai": {

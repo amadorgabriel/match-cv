@@ -29,7 +29,7 @@ export interface StepState {
 
 export const STEP_LABELS: Record<StepId, string> = {
   parse: "Ler o currículo",
-  brief: "Analisar a vaga",
+  brief: "Extrair perfil e vaga",
   cv: "Gerar o CV ATS",
   email: "Escrever o e-mail",
   "cover-letter": "Escrever a cover letter",
@@ -40,7 +40,7 @@ export const STEP_LABELS: Record<StepId, string> = {
 /** Mensagem visível enquanto a etapa está em andamento. Sem rotação por tempo. */
 export const STEP_MESSAGES: Record<StepId, string> = {
   parse: "Lendo o currículo…",
-  brief: "Analisando a vaga…",
+  brief: "Extraindo perfil e vaga…",
   cv: "Gerando o CV…",
   email: "Escrevendo o e-mail…",
   "cover-letter": "Escrevendo a cover letter…",

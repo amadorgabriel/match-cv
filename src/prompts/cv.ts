@@ -1,8 +1,9 @@
 import { ACHIEVEMENTS_DOCUMENT_RULE, withAchievementsDocument } from "./achievements-document";
 import { ANTI_AI_RULES } from "./anti-ai-rules";
+import { formatBrief } from "./brief";
 import type { PromptInput } from "./types";
 
-export const CV_PROMPT_VERSION = "cv@1.1.0";
+export const CV_PROMPT_VERSION = "cv@1.2.0";
 
 export const CV_SYSTEM = `
 Você é um especialista em currículos para vagas de tecnologia e em sistemas ATS.
@@ -24,11 +25,12 @@ Tamanho: resumo do CV com 2 a 4 linhas.
 `.trim();
 
 /**
- * O CV ATS usa o texto bruto. O perfil curto não guarda empresas, datas e bullets
- * com a fidelidade que o template precisa repetir.
+ * O CV ATS continua com o texto bruto: o perfil curto não guarda empresas,
+ * datas e bullets com a fidelidade que o PDF precisa repetir.
+ * Quando o brief existe, ele entra como mapa da vaga e do contato, sem substituir a fonte.
  */
-export function buildCvPrompt({ resumeText, jobDescription, achievements, achievementsDocument }: PromptInput): string {
-  return withAchievementsDocument(
+export function buildCvPrompt({ resumeText, jobDescription, achievements, achievementsDocument, brief }: PromptInput): string {
+  const base = withAchievementsDocument(
     [
       "CURRÍCULO ORIGINAL:",
       resumeText,
@@ -41,4 +43,11 @@ export function buildCvPrompt({ resumeText, jobDescription, achievements, achiev
     ].join("\n"),
     achievementsDocument,
   );
+  if (!brief) return base;
+  return [
+    base,
+    "",
+    "DADOS ESTRUTURADOS JÁ EXTRAÍDOS (mapa da vaga e do perfil; não substitua empresas, datas ou bullets do currículo original e não invente contato):",
+    formatBrief(brief),
+  ].join("\n");
 }

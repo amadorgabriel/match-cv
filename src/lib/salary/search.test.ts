@@ -82,10 +82,25 @@ describe("lookupSalary", () => {
   });
 
   it("responde faixa indisponível quando o provedor não busca na web", async () => {
-    const salary = await lookupSalary({ ...webInput, provider: "openrouter", model: "openrouter/free" });
+    const salary = await lookupSalary({ ...webInput, provider: "together", model: "Qwen/Qwen3.8-2.4T-A95B" });
     expect(searchWebSalary).not.toHaveBeenCalled();
     expect(salary.available).toBe(false);
     expect(salary.isMock).toBe(false);
     expect(salary.tried).toContain("Busca na web ignorada: este provedor não tem ferramenta de busca.");
+  });
+
+  it("também consulta a web quando o provedor é OpenRouter", async () => {
+    searchWebSalary.mockResolvedValue(null);
+    const salary = await lookupSalary({
+      ...webInput,
+      provider: "openrouter",
+      model: "openrouter/free",
+      normalizedSearchTitle: "Engenheiro de Software Back-end",
+      company: "Itaú",
+      seniority: "sênior",
+    });
+    expect(searchWebSalary).toHaveBeenCalledOnce();
+    expect(salary.query.jobTitle).toBe("Engenheiro de Software Back-end");
+    expect(salary.query.company).toBe("Itaú");
   });
 });

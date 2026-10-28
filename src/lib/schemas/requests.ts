@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { MODEL_ID_PATTERN, PROVIDER_IDS } from "@/lib/ai/catalog";
-import { BriefSchema } from "@/lib/schemas/brief";
+import { BriefSchema, WorkModelSchema } from "@/lib/schemas/brief";
 
 /** Limites de entrada (também validados no cliente). */
 export const LIMITS = {
@@ -70,30 +70,42 @@ export const DEFAULT_OUTPUT_SELECTION: OutputSelection = {
 
 const ARTIFACT_OUTPUTS = ["cv", "email", "cover-letter", "interview"] as const;
 
-/** E-mail, cover letter e entrevista consomem o perfil extraído em POST /api/brief. */
-const BRIEF_OUTPUTS = ["email", "cover-letter", "interview"] as const;
-
 export type ProcessingStepId = "parse" | "brief" | OutputId;
 
 /**
  * Etapas do processamento para a seleção do formulário.
  * A leitura do PDF entra quando algum texto de IA foi marcado.
- * A análise da vaga entra só para e-mail, cover letter ou entrevista.
- * CV, e-mail, cover letter, entrevista e faixa salarial só entram se marcados.
+ * `/api/brief` entra sempre que qualquer material (CV, salário, e-mail, carta ou entrevista) foi marcado.
+ * O salário sozinho não lê o PDF nesta lista; o fluxo acrescenta a leitura antes do brief.
  */
 export function processingStepsFor(selection: OutputSelection): ProcessingStepId[] {
   const steps: ProcessingStepId[] = [];
   const artifacts = ARTIFACT_OUTPUTS.filter((id) => selection[id]);
+  const needsBrief = artifacts.length > 0 || selection.salary;
   if (artifacts.length > 0) steps.push("parse");
-  if (BRIEF_OUTPUTS.some((id) => selection[id])) steps.push("brief");
+  if (needsBrief) steps.push("brief");
   steps.push(...artifacts);
   if (selection.salary) steps.push("salary");
   return steps;
 }
 
+const optionalSalaryText = (max: number, min = 1) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .transform((value) => (value && value.length >= min ? value : undefined));
+
 export const SalaryRequestSchema = z.object({
-  jobTitle: z.string().trim().min(2).max(120).optional(),
-  location: z.string().trim().max(120).optional(),
+  jobTitle: optionalSalaryText(120, 2),
+  /** Cargo canônico de brief.job. Tem prioridade sobre o regex. */
+  normalizedSearchTitle: optionalSalaryText(160, 2),
+  seniority: optionalSalaryText(40),
+  candidateSeniority: optionalSalaryText(40),
+  company: optionalSalaryText(160, 2),
+  location: optionalSalaryText(120, 2),
+  workModel: WorkModelSchema.optional().catch(undefined),
   jobDescription: z.string().max(LIMITS.maxJobDescriptionChars).optional(),
   /** Opcionais: ligam a busca na web com a chave do usuário. Sem eles, a faixa fica indisponível. */
   provider: z.enum(PROVIDER_IDS).optional(),
