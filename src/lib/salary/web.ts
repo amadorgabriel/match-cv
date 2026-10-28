@@ -84,7 +84,7 @@ export async function searchWebSalary(input: {
   } catch (error) {
     const failure = readProviderHttpFailure(error);
     if (failure?.statusCode === 429) throw new WebSearchRateLimitError(failure.retryAfterSec ?? 15);
-    logApiError({
+    await logApiError({
       route: "/api/salary",
       error,
       statusCode: failure?.statusCode,

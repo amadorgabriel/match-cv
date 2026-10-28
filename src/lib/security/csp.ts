@@ -5,6 +5,8 @@
  * nonce. Só elementos <style> e <script> recebem o nonce do Next.
  * A prévia do CV usa iframe com blob:, então frame-src e object-src
  * permitem blob: e nada além disso.
+ * connect-src continua 'self'. O browser fala com o Sentry pelo túnel
+ * /monitoring, no mesmo origin.
  */
 export function contentSecurityPolicy(nonce: string): string {
   const isDev = process.env.NODE_ENV === "development";

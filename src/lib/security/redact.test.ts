@@ -71,9 +71,9 @@ describe("logApiWarning", () => {
 });
 
 describe("logApiError", () => {
-  it("loga rota, status e a mensagem já redigida", () => {
+  it("loga rota, status e a mensagem já redigida", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    logApiError({
+    await logApiError({
       route: "/api/generate/cv",
       error: new Error("provider said sk-live-abcdefghijklmnopqrstuvwxyz"),
       statusCode: 429,

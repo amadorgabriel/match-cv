@@ -1,4 +1,7 @@
+import { withSentryConfig } from "@sentry/nextjs/config";
 import type { NextConfig } from "next";
+
+import { SENTRY_TUNNEL_PATH } from "./src/lib/observability/sentry-tunnel";
 
 /**
  * A CSP com nonce fica em src/proxy.ts. Um segundo header CSP aqui
@@ -43,4 +46,35 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
+const uploadSourceMaps = Boolean(sentryAuthToken);
+
+/** Projeto SaaS já criado. O DSN e o token continuam só em variável de ambiente. */
+const SENTRY_ORG = process.env.SENTRY_ORG || "amador-gabriel-rc";
+const SENTRY_PROJECT = process.env.SENTRY_PROJECT || "match-cv";
+
+export default withSentryConfig(nextConfig, {
+  org: SENTRY_ORG,
+  project: SENTRY_PROJECT,
+  authToken: sentryAuthToken,
+  silent: !process.env.CI,
+  tunnelRoute: SENTRY_TUNNEL_PATH,
+  widenClientFileUpload: uploadSourceMaps,
+  telemetry: false,
+  sourcemaps: {
+    disable: !uploadSourceMaps,
+  },
+  release: {
+    create: uploadSourceMaps,
+    finalize: uploadSourceMaps,
+  },
+  // O @vercel/otel já instrumenta o servidor. Este hook injetaria outro tracing.
+  buildTimeInstrumentation: false,
+  errorHandler: (error) => {
+    if (sentryAuthToken) throw error;
+    console.warn(`Sentry build: ${error.message}`);
+  },
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+  },
+});

@@ -51,7 +51,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/generate/[artif
     const providerFailure = readProviderHttpFailure(err);
     const timedOut = deadline.timedOut() || isProviderTimeout(err);
     const statusCode = err instanceof ProviderConfigError ? 400 : providerFailure?.statusCode === 429 ? 429 : timedOut ? 504 : 502;
-    logApiError({
+    await logApiError({
       route: "/api/generate/[artifact]",
       error: err,
       statusCode,

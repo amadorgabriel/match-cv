@@ -10,6 +10,7 @@ describe("contentSecurityPolicy", () => {
     expect(csp).toContain("frame-src 'self' blob:");
     expect(csp).toContain("object-src blob:");
     expect(csp).toContain("connect-src 'self'");
+    expect(csp).not.toContain("sentry.io");
     expect(csp).not.toContain("upstash");
     expect(csp).not.toContain("upgrade-insecure-requests");
   });
