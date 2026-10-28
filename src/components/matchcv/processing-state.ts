@@ -1,14 +1,17 @@
 import { STEP_LABELS, STEP_MESSAGES, type StepId, type StepState, type StepStatus } from "./types";
 
 export interface CreateStepOptions {
-  /** PDF opcional de conquistas muda o texto da leitura do currículo. */
+  /** Mais de um documento muda o texto da leitura. */
+  extraDocuments?: boolean;
+  /** Compatível com o nome antigo do PDF de conquistas. */
   achievementsFile?: boolean;
 }
 
 export function createStepStates(ids: readonly StepId[], options?: CreateStepOptions): StepState[] {
+  const extra = Boolean(options?.extraDocuments || options?.achievementsFile);
   return ids.map((id) => ({
     id,
-    label: id === "parse" && options?.achievementsFile ? "Ler o currículo e as conquistas" : STEP_LABELS[id],
+    label: id === "parse" && extra ? "Ler os documentos" : STEP_LABELS[id],
     status: "pending",
   }));
 }
@@ -71,7 +74,7 @@ export function progressPercent(steps: readonly Pick<StepState, "status">[]): nu
 
 export function stageMessage(step: Pick<StepState, "id" | "label" | "status" | "detail">): string {
   if (step.status === "retrying" && step.detail) return step.detail;
-  if (step.id === "parse" && step.label.includes("conquistas")) return "Lendo o currículo e as conquistas…";
+  if (step.id === "parse" && (step.label.includes("documentos") || step.label.includes("conquistas"))) return "Lendo os documentos…";
   return STEP_MESSAGES[step.id];
 }
 

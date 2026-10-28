@@ -131,10 +131,11 @@ describe("estado por etapa", () => {
     expect(liveAnnouncement(ready)).not.toContain("pendente");
   });
 
-  it("ajusta a leitura quando há PDF de conquistas", () => {
-    const steps = createStepStates(["parse", "cv"], { achievementsFile: true });
-    expect(steps[0]?.label).toBe("Ler o currículo e as conquistas");
-    expect(stageMessage({ ...steps[0]!, status: "running" })).toBe("Lendo o currículo e as conquistas…");
+  it("ajusta a leitura quando há mais de um documento", () => {
+    const steps = createStepStates(["parse", "cv"], { extraDocuments: true });
+    expect(steps[0]?.label).toBe("Ler os documentos");
+    expect(stageMessage({ ...steps[0]!, status: "running" })).toBe("Lendo os documentos…");
+    expect(createStepStates(["parse"], { achievementsFile: true })[0]?.label).toBe("Ler os documentos");
   });
 
   it("identifica cada mensagem mesmo quando o texto do retry se repete", () => {

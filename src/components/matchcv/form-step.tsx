@@ -1,7 +1,7 @@
 "use client";
 
-import { EyeIcon, EyeOffIcon, FileTextIcon, KeyRoundIcon, LoaderCircleIcon, SparklesIcon } from "lucide-react";
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { EyeIcon, EyeOffIcon, KeyRoundIcon, LoaderCircleIcon, SparklesIcon } from "lucide-react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import {
   type ProviderOption,
 } from "@/lib/ai/catalog";
 import { validateKey } from "@/lib/client/api";
+import { defaultDocuments, validateDocuments, type DocumentDraft } from "@/lib/documents/compose";
 import { clearStoredKey, parseStoredKey, readStoredKey, saveStoredKey, subscribeNoop } from "@/lib/client/key-storage";
 import { maskKey } from "@/lib/client/mask";
 import {
@@ -33,6 +34,7 @@ import {
   type OutputSelection,
 } from "@/lib/schemas/requests";
 
+import { DocumentFieldGroup } from "./document-field-group";
 import { SavedKeyControls } from "./saved-key-controls";
 import type { FormValues } from "./types";
 
@@ -43,10 +45,6 @@ const OUTPUT_OPTIONS: { id: OutputId; label: string }[] = [
   { id: "interview", label: "Roteiro de entrevista" },
   { id: "salary", label: "Faixa salarial" },
 ];
-
-function isPdf(file: File): boolean {
-  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-}
 
 interface Props {
   initial?: FormValues | null;
@@ -60,11 +58,8 @@ export function FormStep({ initial, onSubmit }: Props) {
   const parsedStored = useMemo(() => parseStoredKey(storedRaw), [storedRaw]);
   const stored = forgotten ? null : parsedStored;
 
-  const [file, setFile] = useState<File | null>(initial?.file ?? null);
-  const [achievementsFile, setAchievementsFile] = useState<File | null>(initial?.achievementsFile ?? null);
-  const achievementsInputRef = useRef<HTMLInputElement>(null);
+  const [documents, setDocuments] = useState<DocumentDraft[]>(() => (initial?.documents?.length ? initial.documents : defaultDocuments()));
   const [jobDescription, setJobDescription] = useState(initial?.jobDescription ?? "");
-  const [achievements, setAchievements] = useState(initial?.achievements ?? "");
   const [outputs, setOutputs] = useState<OutputSelection>(initial?.outputs ?? DEFAULT_OUTPUT_SELECTION);
   const [providerInput, setProvider] = useState<ProviderId | null>(initial?.provider ?? null);
   const [modelInput, setModel] = useState<string | null>(initial?.model ?? null);
@@ -122,23 +117,10 @@ export function FormStep({ initial, onSubmit }: Props) {
     setOutputs((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
-  function clearAchievementsFile() {
-    setAchievementsFile(null);
-    if (achievementsInputRef.current) achievementsInputRef.current.value = "";
-  }
-
   function validate(): Record<string, string> {
-    const e: Record<string, string> = {};
-    if (!file) e.file = "Envie o currículo em PDF.";
-    else if (!isPdf(file)) e.file = "Por enquanto só aceitamos CV em PDF.";
-    else if (file.size > LIMITS.maxFileBytes) e.file = "O PDF precisa ter até 4 MB.";
-    if (achievementsFile) {
-      if (!isPdf(achievementsFile)) e.achievementsFile = "Por enquanto só aceitamos PDF.";
-      else if (achievementsFile.size > LIMITS.maxFileBytes) e.achievementsFile = "O PDF de conquistas precisa ter até 4 MB.";
-    }
+    const e: Record<string, string> = { ...validateDocuments(documents) };
     if (jobDescription.trim().length < 50) e.jobDescription = "Cole a descrição completa da vaga (mínimo de 50 caracteres).";
     if (jobDescription.length > LIMITS.maxJobDescriptionChars) e.jobDescription = "Descrição da vaga longa demais.";
-    if (achievements.length > LIMITS.maxAchievementsChars) e.achievements = "Texto longo demais.";
     if (!useSaved && apiKey.trim().length < 10) e.apiKey = "Informe sua API key do provedor escolhido.";
     const selection = OutputSelectionSchema.safeParse(outputs);
     if (!selection.success) e.outputs = selection.error.issues[0]?.message ?? "Selecione ao menos um material.";
@@ -167,13 +149,11 @@ export function FormStep({ initial, onSubmit }: Props) {
     e.preventDefault();
     const found = validate();
     setErrors(found);
-    if (Object.keys(found).length > 0 || !file) return;
+    if (Object.keys(found).length > 0) return;
 
     const values: FormValues = {
-      file,
-      achievementsFile,
+      documents,
       jobDescription: jobDescription.trim(),
-      achievements: achievements.trim(),
       provider,
       model,
       apiKey: useSaved ? "" : apiKey.trim(),
@@ -199,70 +179,17 @@ export function FormStep({ initial, onSubmit }: Props) {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sua candidatura</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Envie o currículo, cole a vaga e escolha a IA. Sem conta, nada fica no servidor.
+          Adicione o currículo e, se quiser, outros documentos. Cole a vaga e escolha a IA.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>1. Currículo e vaga</CardTitle>
-          <CardDescription>PDF de até 4 MB e a descrição completa da vaga. O PDF de conquistas é opcional.</CardDescription>
+          <CardTitle>1. Documentos e vaga</CardTitle>
+          <CardDescription>Um grupo só para currículo, conquistas e contexto extra. Cada item pode ser PDF ou texto.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="cv-file">Currículo (PDF)</Label>
-              <label
-                htmlFor="cv-file"
-                className="border-input hover:bg-muted/50 flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-4 text-sm transition-colors"
-              >
-                <FileTextIcon className="text-muted-foreground size-5 shrink-0" />
-                <span className="truncate">{file ? `${file.name} (${(file.size / 1024).toFixed(0)} KB)` : "Clique para escolher o arquivo PDF"}</span>
-              </label>
-              <input
-                id="cv-file"
-                type="file"
-                accept="application/pdf,.pdf"
-                className="sr-only"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                aria-invalid={!!errors.file}
-              />
-              {errors.file ? <p className="text-destructive text-sm">{errors.file}</p> : null}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="achievements-file">
-                Conquistas e números (PDF) <span className="text-muted-foreground font-normal">(opcional)</span>
-              </Label>
-              <label
-                htmlFor="achievements-file"
-                className="border-input hover:bg-muted/50 flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-4 text-sm transition-colors"
-              >
-                <FileTextIcon className="text-muted-foreground size-5 shrink-0" />
-                <span className="truncate">
-                  {achievementsFile
-                    ? `${achievementsFile.name} (${(achievementsFile.size / 1024).toFixed(0)} KB)`
-                    : "PDF separado com conquistas por empresa"}
-                </span>
-              </label>
-              <input
-                ref={achievementsInputRef}
-                id="achievements-file"
-                type="file"
-                accept="application/pdf,.pdf"
-                className="sr-only"
-                onChange={(e) => setAchievementsFile(e.target.files?.[0] ?? null)}
-                aria-invalid={!!errors.achievementsFile}
-              />
-              <p className="text-muted-foreground text-xs">Até 4 MB. Entra como contexto factual na geração, sem substituir o campo de texto abaixo.</p>
-              {achievementsFile ? (
-                <Button type="button" variant="link" size="sm" className="h-auto self-start px-0" onClick={clearAchievementsFile}>
-                  Remover arquivo
-                </Button>
-              ) : null}
-              {errors.achievementsFile ? <p className="text-destructive text-sm">{errors.achievementsFile}</p> : null}
-            </div>
-          </div>
+          <DocumentFieldGroup entries={documents} errors={errors} onChange={setDocuments} />
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="jd">Descrição da vaga</Label>
@@ -275,21 +202,6 @@ export function FormStep({ initial, onSubmit }: Props) {
               aria-invalid={!!errors.jobDescription}
             />
             {errors.jobDescription ? <p className="text-destructive text-sm">{errors.jobDescription}</p> : null}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="achievements">
-              Conquistas e números <span className="text-muted-foreground font-normal">(opcional)</span>
-            </Label>
-            <Textarea
-              id="achievements"
-              rows={4}
-              value={achievements}
-              onChange={(e) => setAchievements(e.target.value)}
-              placeholder={"Uma por linha. Elas vão aparecer obrigatoriamente no CV.\nEx.: reduzi o tempo de deploy em 40%"}
-              aria-invalid={!!errors.achievements}
-            />
-            {errors.achievements ? <p className="text-destructive text-sm">{errors.achievements}</p> : null}
           </div>
         </CardContent>
       </Card>

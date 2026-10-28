@@ -9,6 +9,8 @@ export function salaryQueryFromBrief(input: {
   apiKey?: string;
   useSavedKey?: boolean;
   brief?: Brief;
+  cvText?: string;
+  achievementsText?: string;
 }): {
   jobDescription: string;
   jobTitle?: string;
@@ -22,6 +24,8 @@ export function salaryQueryFromBrief(input: {
   model: string;
   apiKey?: string;
   useSavedKey?: boolean;
+  cvText?: string;
+  achievementsText?: string;
 } {
   const job = input.brief?.job;
   return {
@@ -37,7 +41,14 @@ export function salaryQueryFromBrief(input: {
     model: input.model,
     apiKey: input.apiKey,
     useSavedKey: input.useSavedKey,
+    cvText: clip(input.cvText),
+    achievementsText: clip(input.achievementsText),
   };
+}
+
+function clip(value: string | undefined): string | undefined {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed.slice(0, 8_000) : undefined;
 }
 
 function text(value: string | null | undefined, min: number): string | undefined {

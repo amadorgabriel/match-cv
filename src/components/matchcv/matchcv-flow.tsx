@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 
 import { concurrencyForProvider, mapWithConcurrency, RETRY_ATTEMPTS, retryAsync, retryDelayMs } from "@/lib/async/pool";
-import { ApiError, fetchBrief, fetchSalary, fetchVerification, generate, isRetryableClientError, parseResume, type GeneratePayload, type Results } from "@/lib/client/api";
+import { ApiError, extractPdf, fetchBrief, fetchSalary, fetchVerification, generate, isRetryableClientError, type GeneratePayload, type Results } from "@/lib/client/api";
+import { composeDocuments, defaultDocuments } from "@/lib/documents/compose";
 import { salaryQueryFromBrief } from "@/lib/salary/query";
 import type { Brief } from "@/lib/schemas/brief";
 import type { VerificationReport } from "@/lib/verification/types";
@@ -161,12 +162,32 @@ export function MatchCvFlow() {
   async function runParse(form: FormValues, payload: GeneratePayload, signal: AbortSignal): Promise<boolean> {
     dispatch({ type: "start", id: "parse" });
     try {
-      const cvPromise = parseResume(form.file, signal);
-      const achievementsPromise = form.achievementsFile ? parseResume(form.achievementsFile, signal) : Promise.resolve(null);
-      const [parsed, achievementsPdf] = await Promise.all([cvPromise, achievementsPromise]);
+      const extracted = new Map<string, string>();
+      const pdfs = form.documents.filter((entry) => entry.source === "pdf" && entry.file);
+      await Promise.all(
+        pdfs.map(async (entry) => {
+          const parsed = await extractPdf(entry.file as File, signal);
+          extracted.set(entry.id, parsed.text);
+        }),
+      );
       if (signal.aborted) return false;
-      payload.resumeText = parsed.text;
-      payload.achievementsDocument = achievementsPdf?.text ?? "";
+      const composed = composeDocuments(
+        form.documents.map((entry) => ({
+          kind: entry.kind,
+          source: entry.source,
+          text: entry.text,
+          extracted: extracted.get(entry.id),
+        })),
+      );
+      if (composed.resumeText.trim().length < 50) {
+        dispatch({ type: "error", id: "parse", error: "Não deu para ler texto suficiente no currículo." });
+        return false;
+      }
+      payload.resumeText = composed.resumeText;
+      payload.cvText = composed.cvText;
+      payload.achievements = composed.achievements;
+      payload.achievementsDocument = composed.achievementsDocument;
+      payload.achievementsText = composed.achievementsText;
       dispatch({ type: "done", id: "parse" });
       return true;
     } catch (err) {
@@ -233,7 +254,8 @@ export function MatchCvFlow() {
     const requested = processingStepsFor(form.outputs);
     // O texto do CV fica em memória mesmo se o material não foi marcado, para o botão Gerar de cada aba.
     const stepIds: StepId[] = requested.includes("parse") ? requested : ["parse", ...requested];
-    const initial = createStepStates(stepIds, { achievementsFile: Boolean(form.achievementsFile) });
+    const extraDocuments = form.documents.length > 1 || form.documents.some((entry) => entry.kind !== "cv");
+    const initial = createStepStates(stepIds, { extraDocuments });
     const payload: GeneratePayload = {
       provider: form.provider,
       model: form.model,
@@ -241,7 +263,7 @@ export function MatchCvFlow() {
       useSavedKey: form.useSavedKey,
       resumeText: "",
       jobDescription: form.jobDescription,
-      achievements: form.achievements,
+      achievements: "",
       achievementsDocument: "",
     };
     const controller = new AbortController();
@@ -333,7 +355,7 @@ export function MatchCvFlow() {
     setBrief(null);
     setVerification(null);
     setVerificationState("idle");
-    setValues((prev) => (prev ? { ...prev, jobDescription: "", achievements: "", achievementsFile: null } : prev));
+    setValues((prev) => (prev ? { ...prev, jobDescription: "", documents: defaultDocuments() } : prev));
     const initial = createStepStates(processingStepsFor(DEFAULT_OUTPUT_SELECTION));
     stepsRef.current = initial;
     setSteps(initial);
