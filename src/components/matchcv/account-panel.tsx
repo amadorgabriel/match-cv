@@ -36,7 +36,10 @@ export function AccountPanel({ titleId, surface = "page", onClose }: Props) {
         const response = await fetch("/api/account", { cache: "no-store" });
         if (!response.ok || cancelled) return;
         const next = normalizeAccountState(await response.json());
-        if (!cancelled) setAccount(next);
+        if (!cancelled) {
+          if (!canDeleteAccount(next)) setConfirmDelete(false);
+          setAccount(next);
+        }
       } catch {
         // Mantém o estado anônimo: sem sessão, a exclusão continua oculta.
       } finally {
@@ -52,11 +55,8 @@ export function AccountPanel({ titleId, surface = "page", onClose }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!canDeleteAccount(account)) setConfirmDelete(false);
-  }, [account]);
-
   function publish(next: AccountState) {
+    if (!canDeleteAccount(next)) setConfirmDelete(false);
     setAccount(next);
     resetPersistenceMode();
     window.dispatchEvent(new Event(ACCOUNT_CHANGED_EVENT));
