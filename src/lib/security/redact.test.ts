@@ -25,6 +25,20 @@ describe("redactSecrets", () => {
     expect(clean).not.toContain("segredo-aplicacao");
     expect(clean).toContain("[redacted]");
   });
+
+  it("mascara TYPESAFE_API_KEY mesmo quando o valor só está no ambiente", () => {
+    const previous = process.env.TYPESAFE_API_KEY;
+    const key = "ts_live_VERIFICATION_SECRET_99";
+    process.env.TYPESAFE_API_KEY = key;
+    try {
+      const clean = redactSecrets(`a chamada falhou com ${key} e TYPESAFE_API_KEY=${key}`);
+      expect(clean).not.toContain(key);
+      expect(clean).toContain("[redacted]");
+    } finally {
+      if (previous === undefined) delete process.env.TYPESAFE_API_KEY;
+      else process.env.TYPESAFE_API_KEY = previous;
+    }
+  });
 });
 
 describe("logModelUsage", () => {

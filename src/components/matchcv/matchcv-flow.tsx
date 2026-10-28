@@ -3,7 +3,10 @@
 import { useRef, useState } from "react";
 
 import { concurrencyForProvider, mapWithConcurrency, RETRY_ATTEMPTS, retryAsync, retryDelayMs } from "@/lib/async/pool";
-import { ApiError, fetchBrief, fetchSalary, generate, isRetryableClientError, parseResume, type GeneratePayload, type Results } from "@/lib/client/api";
+import { ApiError, fetchBrief, fetchSalary, fetchVerification, generate, isRetryableClientError, parseResume, type GeneratePayload, type Results } from "@/lib/client/api";
+import { salaryQueryFromBrief } from "@/lib/salary/query";
+import type { Brief } from "@/lib/schemas/brief";
+import type { VerificationReport } from "@/lib/verification/types";
 import { ARTIFACTS, type Artifact } from "@/lib/schemas/outputs";
 import { DEFAULT_OUTPUT_SELECTION, processingStepsFor } from "@/lib/schemas/requests";
 
@@ -15,8 +18,7 @@ import type { FormValues, StepId, StepState } from "./types";
 
 type Phase = "form" | "processing" | "results";
 
-const EARLY_STEPS: readonly StepId[] = ["brief", "cv", "salary"];
-const LATER_STEPS: readonly StepId[] = ["email", "cover-letter", "interview"];
+const GENERATION_STEPS: readonly StepId[] = ["cv", "salary", "email", "cover-letter", "interview"];
 
 function isArtifact(id: StepId): id is Artifact {
   return (ARTIFACTS as readonly string[]).includes(id);
@@ -35,12 +37,27 @@ export function MatchCvFlow() {
   const [values, setValues] = useState<FormValues | null>(null);
   const [steps, setSteps] = useState<StepState[]>(() => createStepStates(processingStepsFor(DEFAULT_OUTPUT_SELECTION)));
   const [results, setResults] = useState<Results>({});
+  const [brief, setBrief] = useState<Brief | null>(null);
+  const [verification, setVerification] = useState<VerificationReport | null>(null);
+  const [verificationState, setVerificationState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [regenerating, setRegenerating] = useState<StepId | null>(null);
   const payloadRef = useRef<GeneratePayload | null>(null);
   const valuesRef = useRef<FormValues | null>(null);
   const briefFlight = useRef<Promise<void> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const stepsRef = useRef(steps);
+  const resultsRef = useRef<Results>({});
+  const verificationSeq = useRef(0);
+
+  function storeResults(partial: Results) {
+    resultsRef.current = { ...resultsRef.current, ...partial };
+    setResults(resultsRef.current);
+  }
+
+  function storeBrief(payload: GeneratePayload, next: Brief) {
+    payload.brief = next;
+    setBrief(next);
+  }
 
   function dispatch(event: StepEvent) {
     const next = reduceStep(stepsRef.current, event);
@@ -52,8 +69,8 @@ export function MatchCvFlow() {
     if (payload.brief) return Promise.resolve();
     if (!briefFlight.current) {
       const flight = fetchBrief(payload, signal)
-        .then((brief) => {
-          payload.brief = brief;
+        .then((next) => {
+          storeBrief(payload, next);
         })
         .catch(() => {
           // Sem o perfil, e-mail, carta e entrevista seguem com o texto bruto.
@@ -93,11 +110,11 @@ export function MatchCvFlow() {
   async function runArtifact(artifact: Artifact, payload: GeneratePayload, signal?: AbortSignal, options?: { loadBrief?: boolean }) {
     dispatch({ type: "start", id: artifact });
     try {
-      if (options?.loadBrief && artifact !== "cv") await loadBrief(payload, signal);
+      if (options?.loadBrief) await loadBrief(payload, signal);
       if (signal?.aborted) return;
       const result = await runWithRetry(artifact, (attempt) => generate(artifact, payload, signal, attempt), signal);
       if (signal?.aborted) return;
-      setResults((prev) => ({ ...prev, [artifact]: result }));
+      storeResults({ [artifact]: result });
       dispatch({ type: "done", id: artifact });
     } catch (err) {
       if (signal?.aborted) return;
@@ -111,20 +128,11 @@ export function MatchCvFlow() {
       const salary = await runWithRetry(
         "salary",
         (attempt) =>
-          fetchSalary(
-            {
-              jobDescription: payload.jobDescription,
-              provider: payload.provider,
-              model: payload.model,
-              apiKey: payload.apiKey,
-            },
-            signal,
-            attempt,
-          ),
+          fetchSalary(salaryQueryFromBrief(payload), signal, attempt),
         signal,
       );
       if (signal?.aborted) return;
-      setResults((prev) => ({ ...prev, salary }));
+      storeResults({ salary });
       dispatch({ type: "done", id: "salary" });
     } catch (err) {
       if (signal?.aborted) return;
@@ -137,7 +145,7 @@ export function MatchCvFlow() {
     try {
       const brief = await runWithRetry("brief", (attempt) => fetchBrief(payload, signal, attempt), signal);
       if (signal?.aborted) return;
-      payload.brief = brief;
+      storeBrief(payload, brief);
       briefFlight.current = null;
       dispatch({ type: "done", id: "brief" });
     } catch (err) {
@@ -146,7 +154,7 @@ export function MatchCvFlow() {
       dispatch({
         type: "error",
         id: "brief",
-        error: `${errorMessage(err)} E-mail, carta e entrevista seguem sem essa análise.`,
+        error: `${errorMessage(err)} Os materiais seguem sem essa análise.`,
       });
     }
   }
@@ -171,23 +179,55 @@ export function MatchCvFlow() {
 
   async function runOutputs(payload: GeneratePayload, signal: AbortSignal, ids: readonly StepId[]) {
     const wanted = new Set(ids);
-    const early = EARLY_STEPS.filter((id) => wanted.has(id));
-    const later = LATER_STEPS.filter((id) => wanted.has(id));
+    if (wanted.has("brief")) {
+      await runBrief(payload, signal);
+      if (signal.aborted) return;
+    }
+    const rest = GENERATION_STEPS.filter((id) => wanted.has(id));
+    if (rest.length === 0) return;
     const limit = concurrencyForProvider(payload.provider);
-    const runOne = (id: StepId) => {
-      if (id === "brief") return runBrief(payload, signal);
+    await mapWithConcurrency(rest, limit, (id) => {
       if (id === "salary") return runSalary(payload, signal);
       if (isArtifact(id)) return runArtifact(id, payload, signal);
       return Promise.resolve();
-    };
-    if (early.length > 0) await mapWithConcurrency(early, limit, runOne);
-    if (signal.aborted) return;
-    if (later.length > 0) await mapWithConcurrency(later, limit, runOne);
+    });
+  }
+
+  function scheduleVerification() {
+    const payload = payloadRef.current;
+    if (!payload?.resumeText) return;
+    const requestId = verificationSeq.current + 1;
+    verificationSeq.current = requestId;
+    setVerificationState("loading");
+    const current = resultsRef.current;
+    void fetchVerification({
+      resumeText: payload.resumeText,
+      jobDescription: payload.jobDescription,
+      achievements: payload.achievements,
+      achievementsDocument: payload.achievementsDocument,
+      brief: payload.brief,
+      cv: current.cv?.data,
+      email: current.email?.data,
+      coverLetter: current["cover-letter"]?.data,
+      interview: current.interview?.data,
+    })
+      .then((report) => {
+        if (verificationSeq.current !== requestId) return;
+        setVerification(report);
+        setVerificationState("ready");
+      })
+      .catch(() => {
+        if (verificationSeq.current !== requestId) return;
+        setVerificationState("error");
+      });
   }
 
   function maybeFinish() {
     if (abortRef.current?.signal.aborted) return;
-    if (processingOutcome(stepsRef.current) === "results") setPhase("results");
+    if (processingOutcome(stepsRef.current) === "results") {
+      setPhase("results");
+      scheduleVerification();
+    }
   }
 
   async function start(form: FormValues) {
@@ -210,8 +250,12 @@ export function MatchCvFlow() {
     payloadRef.current = payload;
     briefFlight.current = null;
     stepsRef.current = initial;
+    resultsRef.current = {};
     setValues(form);
     setResults({});
+    setBrief(null);
+    setVerification(null);
+    setVerificationState("idle");
     setSteps(initial);
     setPhase("processing");
 
@@ -258,8 +302,10 @@ export function MatchCvFlow() {
     if (!payload) return;
     setRegenerating(step);
     try {
+      await loadBrief(payload);
       if (step === "salary") await runSalary(payload);
-      else await runArtifact(step, payload, undefined, { loadBrief: true });
+      else await runArtifact(step, payload);
+      scheduleVerification();
     } finally {
       setRegenerating(null);
     }
@@ -274,6 +320,7 @@ export function MatchCvFlow() {
     if (abortRef.current?.signal.aborted) return;
     if (!canViewPartialResults(stepsRef.current)) return;
     setPhase("results");
+    scheduleVerification();
   }
 
   function reset() {
@@ -281,7 +328,11 @@ export function MatchCvFlow() {
     briefFlight.current = null;
     payloadRef.current = null;
     valuesRef.current = null;
+    resultsRef.current = {};
     setResults({});
+    setBrief(null);
+    setVerification(null);
+    setVerificationState("idle");
     setValues((prev) => (prev ? { ...prev, jobDescription: "", achievements: "", achievementsFile: null } : prev));
     const initial = createStepStates(processingStepsFor(DEFAULT_OUTPUT_SELECTION));
     stepsRef.current = initial;
@@ -294,6 +345,9 @@ export function MatchCvFlow() {
     return (
       <ResultsStep
         results={results}
+        brief={brief}
+        verification={verification}
+        verificationState={verificationState}
         jobDescription={values.jobDescription}
         steps={steps}
         isMock={Object.values(results).some((result) => result && typeof result === "object" && ("mock" in result ? result.mock : "isMock" in result && result.isMock))}

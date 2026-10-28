@@ -7,6 +7,29 @@ export interface CitedUrl {
   title?: string;
 }
 
+/**
+ * Lê citações quando o provedor não preenche `sources`.
+ * Cobre o formato de anotação do OpenRouter (`url_citation`) e links http(s) soltos no JSON.
+ */
+export function readLooseCitations(value: unknown, out: CitedUrl[] = []): CitedUrl[] {
+  if (!value || typeof value !== "object") return out;
+  if (Array.isArray(value)) {
+    for (const item of value) readLooseCitations(item, out);
+    return out;
+  }
+  const record = value as Record<string, unknown>;
+  const citation = record.url_citation;
+  if (citation && typeof citation === "object") {
+    const url = (citation as Record<string, unknown>).url;
+    const title = (citation as Record<string, unknown>).title;
+    if (typeof url === "string" && isHttp(url)) out.push({ url, title: typeof title === "string" ? title : undefined });
+  } else if (typeof record.url === "string" && isHttp(record.url) && (record.type === "url_citation" || record.type === "url")) {
+    out.push({ url: record.url, title: typeof record.title === "string" ? record.title : undefined });
+  }
+  for (const child of Object.values(record)) readLooseCitations(child, out);
+  return out;
+}
+
 export interface WebSalaryHit {
   found: boolean;
   observation?: SalaryObservation;

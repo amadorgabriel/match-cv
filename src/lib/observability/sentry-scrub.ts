@@ -23,10 +23,10 @@ export const sentryDataCollection = {
 } satisfies DataCollection;
 
 const EMBEDDED_FIELD =
-  /"(?:resumeText|resume_text|jobDescription|job_description|achievements|achievementsDocument|apiKey|api_key|app_key|authorization|x-api-key|x-goog-api-key)"\s*:\s*"(?:\\.|[^"\\])*"/gi;
+  /"(?:resumeText|resume_text|jobDescription|job_description|achievements|achievementsDocument|apiKey|api_key|app_key|authorization|x-api-key|x-goog-api-key|TYPESAFE_API_KEY|typesafeApiKey|typesafe_api_key)"\s*:\s*"(?:\\.|[^"\\])*"/gi;
 
 const SENSITIVE_KEY =
-  /^(?:authorization|proxy-authorization|x-api-key|x-goog-api-key|api[-_]?key|app[-_]?key|cookie|cookies|set-cookie|resume[-_]?text|job[-_]?description|achievements(?:[-_]?document)?|password|secret)$/i;
+  /^(?:authorization|proxy-authorization|x-api-key|x-goog-api-key|api[-_]?key|app[-_]?key|typesafe[-_]?api[-_]?key|cookie|cookies|set-cookie|resume[-_]?text|job[-_]?description|achievements(?:[-_]?document)?|password|secret)$/i;
 
 const SENSITIVE_ATTRIBUTE =
   /(authorization|x-api-key|x-goog-api-key|api[_-]?key|app[_-]?key|cookie|set-cookie|resume[_-]?text|job[_-]?description|achievements|gen_ai\.(?:prompt|input|output)|ai\.prompt|http\.request\.body|http\.request\.header\.(?:authorization|cookie|x-api-key|x-goog-api-key))/i;
