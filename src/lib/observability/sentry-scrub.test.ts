@@ -65,6 +65,8 @@ describe("scrubSentryEvent", () => {
         resumeText: CV,
         note: `o modelo devolveu ${AIZA}`,
         provider: "google",
+        betterAuthSecret: "better-auth-secret-should-hide",
+        databaseUrl: "postgres://matchcv:db-password-should-hide@db.example/matchcv",
       },
       breadcrumbs: [{ message: `header x-goog-api-key: ${AIZA}`, data: { app_key: APP_KEY, ok: true } }],
       exception: {
@@ -85,6 +87,8 @@ describe("scrubSentryEvent", () => {
     expect(blob).not.toContain("secret-cookie");
     expect(blob).not.toContain("203.0.113.5");
     expect(blob).not.toContain("ana@example.com");
+    expect(blob).not.toContain("better-auth-secret-should-hide");
+    expect(blob).not.toContain("db-password-should-hide");
     expect(blob).not.toContain("apiKey");
     expect(blob).not.toContain("resumeText");
     expect(clean.request && "data" in clean.request).toBe(false);

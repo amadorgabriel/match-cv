@@ -29,6 +29,7 @@ import {
   type OutputSelection,
 } from "@/lib/schemas/requests";
 
+import { SavedKeyControls } from "./saved-key-controls";
 import type { FormValues } from "./types";
 
 const VISIBLE_PROVIDERS = selectableProviders();
@@ -69,6 +70,7 @@ export function FormStep({ initial, onSubmit }: Props) {
   const [apiKeyInput, setApiKey] = useState<string | null>(initial?.apiKey ?? null);
   const [rememberInput, setRemember] = useState<boolean | null>(null);
   const [showKey, setShowKey] = useState(false);
+  const [useSaved, setUseSaved] = useState(Boolean(initial?.useSavedKey));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [keyStatus, setKeyStatus] = useState<{ state: "idle" | "testing" | "ok" | "error"; message?: string }>({
     state: "idle",
@@ -121,13 +123,17 @@ export function FormStep({ initial, onSubmit }: Props) {
     if (jobDescription.trim().length < 50) e.jobDescription = "Cole a descrição completa da vaga (mínimo de 50 caracteres).";
     if (jobDescription.length > LIMITS.maxJobDescriptionChars) e.jobDescription = "Descrição da vaga longa demais.";
     if (achievements.length > LIMITS.maxAchievementsChars) e.achievements = "Texto longo demais.";
-    if (apiKey.trim().length < 10) e.apiKey = "Informe sua API key do provedor escolhido.";
+    if (!useSaved && apiKey.trim().length < 10) e.apiKey = "Informe sua API key do provedor escolhido.";
     const selection = OutputSelectionSchema.safeParse(outputs);
     if (!selection.success) e.outputs = selection.error.issues[0]?.message ?? "Selecione ao menos um material.";
     return e;
   }
 
   async function testKey() {
+    if (useSaved) {
+      setKeyStatus({ state: "ok", message: "A chave salva já foi validada ao guardar." });
+      return;
+    }
     if (apiKey.trim().length < 10) {
       setErrors((prev) => ({ ...prev, apiKey: "Informe sua API key antes de testar." }));
       return;
@@ -154,10 +160,12 @@ export function FormStep({ initial, onSubmit }: Props) {
       achievements: achievements.trim(),
       provider,
       model,
-      apiKey: apiKey.trim(),
+      apiKey: useSaved ? "" : apiKey.trim(),
+      useSavedKey: useSaved || undefined,
       outputs,
     };
-    if (remember) saveStoredKey({ provider, model, apiKey: values.apiKey });
+    if (useSaved) clearStoredKey();
+    else if (remember) saveStoredKey({ provider, model, apiKey: values.apiKey });
     else clearStoredKey();
     onSubmit(values);
   }
@@ -175,7 +183,7 @@ export function FormStep({ initial, onSubmit }: Props) {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sua candidatura</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Envie o currículo, cole a vaga e escolha a IA. Nada fica salvo no servidor.
+          Envie o currículo, cole a vaga e escolha a IA. Sem conta, nada fica no servidor.
         </p>
       </div>
 
@@ -274,7 +282,7 @@ export function FormStep({ initial, onSubmit }: Props) {
         <CardHeader>
           <CardTitle>2. Provedor de IA e sua chave</CardTitle>
           <CardDescription>
-            Você usa a sua própria API key. Ela fica só na memória desta página e vai direto para a geração, sem ser salva.
+            Você usa a sua própria API key. Sem conta, ela fica só nesta página. Se quiser, salve uma cópia cifrada para reutilizar.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -365,6 +373,7 @@ export function FormStep({ initial, onSubmit }: Props) {
               </a>
               .
             </p>
+            <SavedKeyControls provider={provider} apiKey={apiKey} useSaved={useSaved} onUseSavedChange={setUseSaved} />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-sm">
                 <input

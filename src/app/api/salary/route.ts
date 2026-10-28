@@ -3,7 +3,9 @@ import { readModelCallContext } from "@/lib/ai/telemetry-context";
 import { providerRateLimitMessage } from "@/lib/ai/provider-error";
 import { lookupSalary, SalaryRateLimitError } from "@/lib/salary/search";
 import type { Salary } from "@/lib/schemas/outputs";
+import { resolveRequestApiKey } from "@/lib/keys/resolve-saved-key";
 import { SalaryRequestSchema } from "@/lib/schemas/requests";
+import { withSetCookies } from "@/lib/security/cookies";
 import { checkRateLimit, jsonError, jsonOk, readJson } from "@/lib/security/http";
 import { logApiError } from "@/lib/security/redact";
 
@@ -37,30 +39,33 @@ export async function POST(req: Request) {
 
   const parsed = await readJson(req, SalaryRequestSchema, 40_000);
   if (!parsed.ok) return parsed.response;
+  const resolved = await resolveRequestApiKey(req, { ...parsed.data, allowMissing: !parsed.data.useSavedKey });
+  if (!resolved.ok) return resolved.response;
+  const input = { ...parsed.data, apiKey: resolved.apiKey };
 
   const started = Date.now();
   try {
     const salary = await lookupSalary({
-      ...parsed.data,
+      ...input,
       realAi: isRealAiEnabled(),
       signal: req.signal,
       telemetry: readModelCallContext(req, {
-        provider: parsed.data.provider ?? "none",
-        model: parsed.data.model ?? "none",
+        provider: input.provider ?? "none",
+        model: input.model ?? "none",
         artifact: "salary-web",
       }),
     });
-    return jsonOk(salary);
+    return withSetCookies(jsonOk(salary), resolved.cookies);
   } catch (err) {
     const statusCode = err instanceof SalaryRateLimitError ? 429 : 200;
     await logApiError({
       route: "/api/salary",
       error: err,
       statusCode,
-      provider: parsed.data.provider,
-      model: parsed.data.model,
+      provider: input.provider,
+      model: input.model,
       durationMs: Date.now() - started,
-      secrets: [parsed.data.apiKey],
+      secrets: [input.apiKey],
     });
     if (err instanceof SalaryRateLimitError) {
       return jsonError(429, "provider_rate_limited", providerRateLimitMessage(err.retryAfterSec), {

@@ -25,6 +25,22 @@ describe("redactSecrets", () => {
     expect(clean).not.toContain("segredo-aplicacao");
     expect(clean).toContain("[redacted]");
   });
+
+  it("mascara DATABASE_URL, BETTER_AUTH_SECRET e KEY_ENCRYPTION_SECRET", () => {
+    const password = "db-password-should-hide";
+    const authSecret = "better-auth-secret-should-hide";
+    const kek = "key-encryption-secret-should-hide";
+    const text = [
+      `DATABASE_URL=postgres://matchcv:${password}@db.example:5432/matchcv`,
+      `BETTER_AUTH_SECRET=${authSecret}`,
+      `KEY_ENCRYPTION_SECRET=${kek}`,
+    ].join(" ");
+    const clean = redactSecrets(text, [password, authSecret, kek]);
+    expect(clean).not.toContain(password);
+    expect(clean).not.toContain(authSecret);
+    expect(clean).not.toContain(kek);
+    expect(clean).not.toContain("postgres://");
+  });
 });
 
 describe("logModelUsage", () => {

@@ -117,6 +117,7 @@ export function MatchCvFlow() {
               provider: payload.provider,
               model: payload.model,
               apiKey: payload.apiKey,
+              useSavedKey: payload.useSavedKey,
             },
             signal,
             attempt,
@@ -198,7 +199,8 @@ export function MatchCvFlow() {
     const payload: GeneratePayload = {
       provider: form.provider,
       model: form.model,
-      apiKey: form.apiKey,
+      apiKey: form.useSavedKey ? undefined : form.apiKey,
+      useSavedKey: form.useSavedKey,
       resumeText: "",
       jobDescription: form.jobDescription,
       achievements: form.achievements,
