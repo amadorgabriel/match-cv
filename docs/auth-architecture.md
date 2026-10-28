@@ -6,8 +6,8 @@ Escolha: **Better Auth** com **Drizzle ORM** sobre **Postgres** (Supabase Postgr
 
 | Ambiente | O que acontece |
 |---|---|
-| Sem `DATABASE_URL` | Login desligado. Candidaturas em `localStorage`. Chave de IA num cookie `HttpOnly` cifrado com AES-256-GCM. |
-| `DATABASE_URL` + `BETTER_AUTH_SECRET` (32+ caracteres) | Better Auth ativo: magic link por e-mail e OAuth GitHub/Google quando os client ids existem. |
+| Sem `DATABASE_URL` (ou sem `BETTER_AUTH_SECRET` de 32+ caracteres) | Sessão local em cookie `HttpOnly` cifrado (`matchcv_local_session`). A pessoa entra com e-mail e nome em `/conta` ou no diálogo de Conta. A chave de IA continua num cookie `HttpOnly` cifrado com AES-256-GCM. |
+| `DATABASE_URL` + `BETTER_AUTH_SECRET` (32+ caracteres) | Better Auth ativo: magic link por e-mail e OAuth GitHub/Google quando os client ids existem. A sessão local não é criada nesse modo. |
 | Usuário autenticado com banco | Chaves em `saved_api_keys` e candidaturas em `job_applications`. |
 | Banco configurado, mas a conexão falha | A sessão não é exigida. O app volta ao cofre local e ao `localStorage` para não derrubar o fluxo anônimo. |
 
@@ -17,7 +17,9 @@ Escolha: **Better Auth** com **Drizzle ORM** sobre **Postgres** (Supabase Postgr
 - Tabelas `users`, `sessions`, `accounts` e `verifications`, com os campos que o Better Auth espera e nomes SQL em snake_case.
 - Magic link: `POST /api/auth/sign-in/magic-link`. Com `RESEND_API_KEY` e `EMAIL_FROM`, o link sai por e-mail. Fora de produção, sem SMTP, `GET /api/auth/dev/magic-link?email=` devolve o link para teste. Em produção essa rota responde 404 e o link não é logado.
 - OAuth: GitHub e Google só entram na configuração quando o par de client id/secret existe. A UI mostra o botão desabilitado quando o provedor não está configurado.
-- `DELETE /api/account` faz hard delete do usuário. As FKs `ON DELETE CASCADE` apagam sessões, contas ligadas, chaves e candidaturas. Verificações saem pelo e-mail. O cookie do cofre e os cookies de sessão são limpos. O navegador também apaga `localStorage` e a chave da aba.
+- Sem Better Auth, `POST /api/account/session` grava a sessão local (e-mail e nome) num cookie `HttpOnly` cifrado com o mesmo envelope AES-256-GCM, propósito `session`. `DELETE /api/account/session` revoga o id da sessão e apaga o cookie.
+- A tela de conta fica em `/conta` e no diálogo aberto por Conta no cabeçalho. O botão "Excluir conta e todos os dados (LGPD)" só aparece com `authenticated: true` e um usuário válido.
+- `DELETE /api/account` faz hard delete do usuário quando há sessão do Better Auth. As FKs `ON DELETE CASCADE` apagam sessões, contas ligadas, chaves e candidaturas. Verificações saem pelo e-mail. O cookie do cofre, o cookie da sessão local e os cookies do Better Auth são limpos. O navegador também apaga `localStorage` e a chave da aba.
 
 ## Chave de API
 
