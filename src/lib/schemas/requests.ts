@@ -30,7 +30,7 @@ export const ValidateKeyRequestSchema = z.object({
   apiKey,
 });
 
-export const GenerateRequestSchema = ProviderSelectionSchema.extend({
+const GenerateRequestObject = ProviderSelectionSchema.extend({
   apiKey: apiKey.optional(),
   /** Quando verdadeiro, o handler decifra a chave salva e o corpo não traz a chave. */
   useSavedKey: z.boolean().optional(),
@@ -46,6 +46,27 @@ export const GenerateRequestSchema = ProviderSelectionSchema.extend({
     ctx.addIssue({ code: "custom", message: "Informe a API key ou use a chave salva.", path: ["apiKey"] });
   }
 });
+
+/** Aceita cvText/achievementsText além de resumeText/achievements. Os nomes antigos continuam valendo. */
+export const GenerateRequestSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object") return value;
+  const record = { ...(value as Record<string, unknown>) };
+  if (typeof record.resumeText !== "string" && typeof record.cvText === "string") record.resumeText = record.cvText;
+  const achievementsEmpty = typeof record.achievements !== "string" || record.achievements.trim() === "";
+  if (achievementsEmpty && typeof record.achievementsText === "string") {
+    record.achievements = record.achievementsText.slice(0, LIMITS.maxAchievementsChars);
+    if (
+      (typeof record.achievementsDocument !== "string" || record.achievementsDocument.trim() === "") &&
+      record.achievementsText.length > LIMITS.maxAchievementsChars
+    ) {
+      record.achievementsDocument = record.achievementsText.slice(
+        LIMITS.maxAchievementsChars,
+        LIMITS.maxAchievementsChars + LIMITS.maxResumeChars,
+      );
+    }
+  }
+  return record;
+}, GenerateRequestObject);
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema> & { apiKey: string };
 
 /** Materiais que o usuário pode marcar no formulário. */
@@ -118,5 +139,9 @@ export const SalaryRequestSchema = z.object({
   model: z.string().regex(MODEL_ID_PATTERN, "ID de modelo inválido").optional(),
   apiKey: apiKey.optional(),
   useSavedKey: z.boolean().optional(),
+  /** Texto do currículo já composto. Entra na senioridade quando o brief não trouxe uma. */
+  cvText: z.string().max(LIMITS.maxResumeChars).optional(),
+  /** Conquistas e contexto extra já compostos. */
+  achievementsText: z.string().max(LIMITS.maxResumeChars).optional(),
 });
 export type SalaryRequest = z.infer<typeof SalaryRequestSchema>;
